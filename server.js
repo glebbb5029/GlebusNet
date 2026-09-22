@@ -1,0 +1,118 @@
+import http from "http";
+import { spawn } from "child_process";
+import fs from "fs";
+import { ethers } from "ethers";
+
+const PUBLIC_PORT = Number(process.env.PORT || 3000);
+const RPC_PORT = 8545;
+
+// Первый тестовый аккаунт Hardhat.
+// НЕ используй этот ключ для реальных денег.
+
+console.log("Starting GlebusNet...");
+
+// Запускаем Hardhat node внутри Render
+const hardhat = spawn(
+    "npx",
+    [
+        "hardhat",
+        "node",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        String(RPC_PORT),
+        "--chain-id",
+        "7777"
+    ],
+    {
+        shell: true,
+        stdio: "inherit"
+    }
+);
+
+hardhat.on("exit", (code) => {
+    console.log(`Hardhat stopped with code ${code}`);
+    process.exit(code ?? 1);
+});
+
+const sleep = (ms) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+async function deployToken() {
+    const provider = new ethers.JsonRpcProvider(
+        `http://127.0.0.1:${RPC_PORT}`
+    );
+
+    const wallet = await provider.getSigner(0);
+
+    const artifact = JSON.parse(
+        fs.readFileSync(
+            "./artifacts/contracts/GlebusToken.sol/GlebusToken.json",
+            "utf8"
+        )
+    );
+
+    const factory = new ethers.ContractFactory(
+        artifact.abi,
+        artifact.bytecode,
+        wallet
+    );
+
+    const token = await factory.deploy(
+        ethers.parseUnits("1000000", 18)
+    );
+
+    await token.waitForDeployment();
+
+    console.log("=================================");
+    console.log("GlebusNet started");
+    console.log("Chain ID: 7777");
+    console.log("GLB token:", await token.getAddress());
+    console.log("=================================");
+}
+
+async function start() {
+    // Ждём запуска Hardhat
+    await sleep(5000);
+
+    try {
+        await deployToken();
+    } catch (error) {
+        console.error("Token deployment failed:");
+        console.error(error);
+        process.exit(1);
+    }
+
+    // HTTPS Render -> этот HTTP proxy -> Hardhat RPC
+    const server = http.createServer((req, res) => {
+        const proxy = http.request(
+            {
+                hostname: "127.0.0.1",
+                port: RPC_PORT,
+                path: req.url,
+                method: req.method,
+                headers: req.headers
+            },
+            (rpcRes) => {
+                res.writeHead(rpcRes.statusCode || 500, rpcRes.headers);
+                rpcRes.pipe(res);
+            }
+        );
+
+        proxy.on("error", (error) => {
+            console.error("RPC proxy error:", error);
+            if (!res.headersSent) {
+                res.writeHead(502);
+            }
+            res.end("RPC unavailable");
+        });
+
+        req.pipe(proxy);
+    });
+
+    server.listen(PUBLIC_PORT, "0.0.0.0", () => {
+        console.log(`GlebusNet RPC proxy listening on port ${PUBLIC_PORT}`);
+    });
+}
+
+start();
