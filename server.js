@@ -72,10 +72,27 @@ async function deployToken() {
 
 async function start() {
     // Ждём запуска Hardhat
-    await sleep(5000);
-
+   for (let i = 0; i < 30; i++) {
     try {
-        await deployToken();
+        const provider = new ethers.JsonRpcProvider(
+            `http://127.0.0.1:${RPC_PORT}`
+        );
+
+        await provider.getNetwork();
+        console.log("Hardhat RPC is ready");
+        break;
+    } catch {
+        console.log("Waiting for Hardhat RPC...");
+        await sleep(1000);
+    }
+
+    if (i === 29) {
+        throw new Error("Hardhat RPC did not start");
+    }
+}
+
+try {
+    await deployToken();
     } catch (error) {
         console.error("Token deployment failed:");
         console.error(error);
