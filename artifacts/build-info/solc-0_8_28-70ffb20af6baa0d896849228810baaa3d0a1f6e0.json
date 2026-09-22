@@ -1,0 +1,42 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-70ffb20af6baa0d896849228810baaa3d0a1f6e0",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/GlebusToken.sol": "project/contracts/GlebusToken.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/GlebusToken.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\ncontract GlebusToken {\r\n    string public name = \"Glebus\";\r\n    string public symbol = \"GLB\";\r\n    uint8 public decimals = 18;\r\n\r\n    uint256 public totalSupply;\r\n\r\n    mapping(address => uint256) public balanceOf;\r\n\r\n    event Transfer(\r\n        address indexed from,\r\n        address indexed to,\r\n        uint256 value\r\n    );\r\n\r\n    constructor(uint256 initialSupply) {\r\n        totalSupply = initialSupply;\r\n        balanceOf[msg.sender] = initialSupply;\r\n\r\n        emit Transfer(address(0), msg.sender, initialSupply);\r\n    }\r\n\r\n    function transfer(address to, uint256 amount) public returns (bool) {\r\n        require(\r\n            balanceOf[msg.sender] >= amount,\r\n            \"Not enough GLB\"\r\n        );\r\n\r\n        balanceOf[msg.sender] -= amount;\r\n        balanceOf[to] += amount;\r\n\r\n        emit Transfer(msg.sender, to, amount);\r\n\r\n        return true;\r\n    }\r\n}"
+      }
+    }
+  }
+}
