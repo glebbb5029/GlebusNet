@@ -27,7 +27,7 @@ const hardhat = spawn(
     {
         stdio: "inherit"
     }
-);;
+);
 
 hardhat.on("exit", (code) => {
     console.log(`Hardhat stopped with code ${code}`);
