@@ -13,9 +13,9 @@ console.log("Starting GlebusNet...");
 
 // Запускаем Hardhat node внутри Render
 const hardhat = spawn(
-    "npx",
+    process.execPath,
     [
-        "hardhat",
+        "./node_modules/hardhat/dist/src/cli.js",
         "node",
         "--hostname",
         "127.0.0.1",
@@ -25,10 +25,9 @@ const hardhat = spawn(
         "7777"
     ],
     {
-        shell: true,
         stdio: "inherit"
     }
-);
+);;
 
 hardhat.on("exit", (code) => {
     console.log(`Hardhat stopped with code ${code}`);
