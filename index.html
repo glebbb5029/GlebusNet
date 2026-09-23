@@ -28,6 +28,15 @@
             border-radius: 24px;
         }
 
+        .logo {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            object-fit: contain;
+            margin: 8px;
+            vertical-align: middle;
+        }
+
         h1 {
             margin-bottom: 10px;
         }
@@ -69,6 +78,20 @@
 
 <div class="card">
 
+    <div>
+        <img
+            class="logo"
+            src="https://i.ibb.co/678kxQYb/file-00000000e5148246988e64699e30801e.png"
+            alt="GAS"
+        >
+
+        <img
+            class="logo"
+            src="https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png"
+            alt="GLB"
+        >
+    </div>
+
     <h1>GlebusNet</h1>
 
     <p>Custom EVM blockchain network</p>
@@ -92,11 +115,8 @@ const RPC = "https://glebusnet.onrender.com";
 const TOKEN =
     "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
-const GAS_LOGO =
-    "https://glebbb5029.github.io/GlebusNet/gas.png";
-
 const GLB_LOGO =
-    "https://glebbb5029.github.io/GlebusNet/glb.png";
+    "https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png";
 
 
 async function addNetwork() {
@@ -104,7 +124,7 @@ async function addNetwork() {
     if (!window.ethereum) {
 
         document.getElementById("status").innerText =
-            "MetaMask не найден";
+            "MetaMask не найден. Откройте страницу через MetaMask.";
 
         return;
     }
@@ -149,7 +169,7 @@ async function addToken() {
     if (!window.ethereum) {
 
         document.getElementById("status").innerText =
-            "MetaMask не найден";
+            "MetaMask не найден. Откройте страницу через MetaMask.";
 
         return;
     }
