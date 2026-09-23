@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,34 +8,51 @@
     <title>GlebusNet</title>
 
     <style>
+
         body {
             margin: 0;
             min-height: 100vh;
+
             display: flex;
             justify-content: center;
             align-items: center;
+
             background: #111827;
             color: white;
+
             font-family: Arial, sans-serif;
         }
 
         .card {
             width: 90%;
             max-width: 420px;
+
             padding: 30px;
             box-sizing: border-box;
+
             text-align: center;
+
             background: #1f2937;
             border-radius: 24px;
+        }
+
+        .logos {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            gap: 15px;
+
+            margin-bottom: 20px;
         }
 
         .logo {
             width: 70px;
             height: 70px;
+
             border-radius: 16px;
+
             object-fit: contain;
-            margin: 8px;
-            vertical-align: middle;
         }
 
         h1 {
@@ -47,12 +65,16 @@
 
         button {
             width: 100%;
+
             padding: 16px;
             margin-top: 12px;
+
             border: none;
             border-radius: 12px;
+
             font-size: 16px;
             font-weight: bold;
+
             cursor: pointer;
         }
 
@@ -68,17 +90,27 @@
 
         #status {
             margin-top: 20px;
+
             color: #9ca3af;
+
             font-size: 14px;
+
+            word-break: break-word;
         }
+
     </style>
+
 </head>
+
 
 <body>
 
+
 <div class="card">
 
-    <div>
+
+    <div class="logos">
+
         <img
             class="logo"
             src="https://i.ibb.co/678kxQYb/file-00000000e5148246988e64699e30801e.png"
@@ -90,33 +122,58 @@
             src="https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png"
             alt="GLB"
         >
+
     </div>
+
 
     <h1>GlebusNet</h1>
 
-    <p>Custom EVM blockchain network</p>
+    <p>
+        Custom EVM blockchain network
+    </p>
 
-    <button class="network" onclick="addNetwork()">
+
+    <button
+        class="network"
+        onclick="addNetwork()"
+    >
         ⛽ Добавить GlebusNet
     </button>
 
-    <button class="token" onclick="addToken()">
+
+    <button
+        class="token"
+        onclick="addToken()"
+    >
         🪙 Добавить GLB
     </button>
 
+
     <div id="status"></div>
+
 
 </div>
 
+
+
 <script>
 
-const RPC = "https://glebusnet.onrender.com";
+
+const RPC =
+    "https://glebusnet.onrender.com";
+
+
+const CHAIN_ID =
+    "0x1E61";
+
 
 const TOKEN =
     "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
+
 const GLB_LOGO =
     "https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png";
+
 
 
 async function addNetwork() {
@@ -129,39 +186,61 @@ async function addNetwork() {
         return;
     }
 
+
     try {
 
         await window.ethereum.request({
 
             method: "wallet_addEthereumChain",
 
-            params: [{
-                chainId: "0x1E61",
+            params: [
 
-                chainName: "GlebusNet",
+                {
 
-                nativeCurrency: {
-                    name: "GAS",
-                    symbol: "GAS",
-                    decimals: 18
-                },
+                    chainId: CHAIN_ID,
 
-                rpcUrls: [RPC]
-            }]
+                    chainName: "GlebusNet",
+
+                    nativeCurrency: {
+
+                        name: "GAS",
+
+                        symbol: "GAS",
+
+                        decimals: 18
+
+                    },
+
+                    rpcUrls: [
+
+                        RPC
+
+                    ]
+
+                }
+
+            ]
 
         });
+
 
         document.getElementById("status").innerText =
             "GlebusNet добавлен!";
 
+
     } catch (error) {
 
-        document.getElementById("status").innerText =
-            "Не удалось добавить сеть";
-
         console.error(error);
+
+
+        document.getElementById("status").innerText =
+            "Ошибка: " +
+            (error.message || "не удалось добавить сеть");
+
     }
+
 }
+
 
 
 async function addToken() {
@@ -174,47 +253,160 @@ async function addToken() {
         return;
     }
 
+
     try {
 
-        const added = await window.ethereum.request({
 
-            method: "wallet_watchAsset",
+        document.getElementById("status").innerText =
+            "Переключаемся на GlebusNet...";
 
-            params: {
 
-                type: "ERC20",
+        // Проверяем текущую сеть
 
-                options: {
+        const currentChain =
+            await window.ethereum.request({
 
-                    address: TOKEN,
+                method: "eth_chainId"
 
-                    symbol: "GLB",
+            });
 
-                    decimals: 18,
 
-                    image: GLB_LOGO
+        // Если это не GlebusNet,
+        // переключаемся на неё
+
+        if (currentChain !== CHAIN_ID) {
+
+            try {
+
+                await window.ethereum.request({
+
+                    method: "wallet_switchEthereumChain",
+
+                    params: [
+
+                        {
+
+                            chainId: CHAIN_ID
+
+                        }
+
+                    ]
+
+                });
+
+            } catch (switchError) {
+
+                // 4902 = сеть ещё не добавлена
+
+                if (switchError.code === 4902) {
+
+                    await window.ethereum.request({
+
+                        method: "wallet_addEthereumChain",
+
+                        params: [
+
+                            {
+
+                                chainId: CHAIN_ID,
+
+                                chainName: "GlebusNet",
+
+                                nativeCurrency: {
+
+                                    name: "GAS",
+
+                                    symbol: "GAS",
+
+                                    decimals: 18
+
+                                },
+
+                                rpcUrls: [
+
+                                    RPC
+
+                                ]
+
+                            }
+
+                        ]
+
+                    });
+
+                } else {
+
+                    throw switchError;
+
                 }
+
             }
 
-        });
+        }
+
+
+        document.getElementById("status").innerText =
+            "Добавляем GLB...";
+
+
+        // Добавляем ERC-20 токен
+
+        const added =
+            await window.ethereum.request({
+
+                method: "wallet_watchAsset",
+
+                params: {
+
+                    type: "ERC20",
+
+                    options: {
+
+                        address: TOKEN,
+
+                        symbol: "GLB",
+
+                        decimals: 18,
+
+                        image: GLB_LOGO
+
+                    }
+
+                }
+
+            });
+
 
         if (added) {
 
             document.getElementById("status").innerText =
-                "GLB добавлен в MetaMask!";
+                "GLB успешно добавлен в MetaMask!";
+
+        } else {
+
+            document.getElementById("status").innerText =
+                "Добавление GLB отменено.";
 
         }
 
+
     } catch (error) {
 
-        document.getElementById("status").innerText =
-            "Не удалось добавить GLB";
-
         console.error(error);
+
+
+        document.getElementById("status").innerText =
+            "Ошибка MetaMask: " +
+            (error.message || "неизвестная ошибка");
+
     }
+
 }
+
 
 </script>
 
+
 </body>
+
 </html>
