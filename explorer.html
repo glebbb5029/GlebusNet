@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="ru">
 
@@ -89,6 +90,34 @@
             font-size: 13px;
             margin-top: 6px;
             word-break: break-all;
+        }
+
+        .transaction {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 12px;
+            border-left: 4px solid #6366f1;
+        }
+
+        .transaction-title {
+            font-weight: bold;
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .amount {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .gas {
+            color: #fbbf24;
+        }
+
+        .glb {
+            color: #60a5fa;
         }
 
         .error {
@@ -230,6 +259,14 @@
 const RPC =
     "https://glebusnet.onrender.com";
 
+const GLB_CONTRACT =
+    "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+
+// Первые 4 байта функции transfer(address,uint256)
+const TRANSFER_SELECTOR =
+    "0xa9059cbb";
+
 
 async function rpc(method, params = []) {
 
@@ -262,6 +299,132 @@ async function rpc(method, params = []) {
 }
 
 
+// Сокращаем длинный адрес
+function shortAddress(address) {
+
+    if (!address) {
+        return "—";
+    }
+
+    return (
+        address.slice(0, 6) +
+        "..." +
+        address.slice(-4)
+    );
+}
+
+
+// Переводим hex в число
+function hexToBigInt(hex) {
+
+    if (!hex || hex === "0x") {
+        return 0n;
+    }
+
+    return BigInt(hex);
+}
+
+
+// Форматируем GAS
+function formatGas(value) {
+
+    const wei = hexToBigInt(value);
+
+    const whole =
+        wei / 1000000000000000000n;
+
+    const fraction =
+        wei % 1000000000000000000n;
+
+    if (fraction === 0n) {
+        return whole.toString() + " GAS";
+    }
+
+    const fractionString =
+        fraction
+            .toString()
+            .padStart(18, "0")
+            .replace(/0+$/, "");
+
+    return (
+        whole.toString() +
+        "." +
+        fractionString +
+        " GAS"
+    );
+}
+
+
+// Форматируем GLB
+function formatGLB(value) {
+
+    const amount =
+        hexToBigInt(value);
+
+    const whole =
+        amount / 1000000000000000000n;
+
+    const fraction =
+        amount % 1000000000000000000n;
+
+    if (fraction === 0n) {
+        return whole.toLocaleString("en-US") + " GLB";
+    }
+
+    const fractionString =
+        fraction
+            .toString()
+            .padStart(18, "0")
+            .replace(/0+$/, "");
+
+    return (
+        whole.toLocaleString("en-US") +
+        "." +
+        fractionString +
+        " GLB"
+    );
+}
+
+
+// Пытаемся определить ERC-20 transfer
+function parseGLBTransfer(transaction) {
+
+    if (!transaction.input) {
+        return null;
+    }
+
+    if (
+        transaction.to &&
+        transaction.to.toLowerCase() ===
+        GLB_CONTRACT.toLowerCase() &&
+        transaction.input.startsWith(TRANSFER_SELECTOR)
+    ) {
+
+        const data =
+            transaction.input.slice(10);
+
+        if (data.length < 128) {
+            return null;
+        }
+
+        const recipient =
+            "0x" +
+            data.slice(24, 64);
+
+        const amount =
+            "0x" +
+            data.slice(64, 128);
+
+        return {
+            recipient,
+            amount
+        };
+    }
+
+    return null;
+}
+
+
 async function loadExplorer() {
 
     const status =
@@ -278,8 +441,7 @@ async function loadExplorer() {
             "Подключение к GlebusNet...";
 
 
-        // Получаем Chain ID
-
+        // Chain ID
         const chainId =
             await rpc("eth_chainId");
 
@@ -294,8 +456,7 @@ async function loadExplorer() {
             chainIdNumber;
 
 
-        // Получаем последний блок
-
+        // Последний блок
         const latestBlock =
             await rpc("eth_blockNumber");
 
@@ -307,8 +468,7 @@ async function loadExplorer() {
             latestNumber;
 
 
-        // Загружаем последние 10 блоков
-
+        // Контейнер блоков
         const blocksContainer =
             document.getElementById("blocks");
 
@@ -319,6 +479,7 @@ async function loadExplorer() {
             Math.max(0, latestNumber - 9);
 
 
+        // Загружаем последние 10 блоков
         for (
             let number = latestNumber;
             number >= start;
@@ -355,6 +516,146 @@ async function loadExplorer() {
                 );
 
 
+            let transactionsHTML = "";
+
+
+            if (
+                block.transactions &&
+                block.transactions.length > 0
+            ) {
+
+                for (
+                    const transaction
+                    of block.transactions
+                ) {
+
+                    const glbTransfer =
+                        parseGLBTransfer(
+                            transaction
+                        );
+
+
+                    // Если это GLB transfer
+                    if (glbTransfer) {
+
+                        transactionsHTML += `
+
+                            <div class="transaction">
+
+                                <div class="transaction-title">
+                                    🔵 GLB перевод
+                                </div>
+
+                                <div class="amount glb">
+                                    ${formatGLB(glbTransfer.amount)}
+                                </div>
+
+                                <div class="small">
+                                    From:
+                                    ${shortAddress(transaction.from)}
+                                </div>
+
+                                <div class="small">
+                                    To:
+                                    ${shortAddress(glbTransfer.recipient)}
+                                </div>
+
+                                <div class="small">
+                                    Tx:
+                                    ${transaction.hash}
+                                </div>
+
+                            </div>
+
+                        `;
+
+                    }
+
+                    // Если это обычный GAS transfer
+                    else if (
+                        transaction.value &&
+                        transaction.value !== "0x0"
+                    ) {
+
+                        transactionsHTML += `
+
+                            <div class="transaction">
+
+                                <div class="transaction-title">
+                                    🟡 GAS перевод
+                                </div>
+
+                                <div class="amount gas">
+                                    ${formatGas(transaction.value)}
+                                </div>
+
+                                <div class="small">
+                                    From:
+                                    ${shortAddress(transaction.from)}
+                                </div>
+
+                                <div class="small">
+                                    To:
+                                    ${shortAddress(transaction.to)}
+                                </div>
+
+                                <div class="small">
+                                    Tx:
+                                    ${transaction.hash}
+                                </div>
+
+                            </div>
+
+                        `;
+
+                    }
+
+                    // Контрактная транзакция без обычного value
+                    else {
+
+                        transactionsHTML += `
+
+                            <div class="transaction">
+
+                                <div class="transaction-title">
+                                    ⚙️ Транзакция
+                                </div>
+
+                                <div class="small">
+                                    From:
+                                    ${shortAddress(transaction.from)}
+                                </div>
+
+                                <div class="small">
+                                    To:
+                                    ${shortAddress(transaction.to)}
+                                </div>
+
+                                <div class="small">
+                                    Tx:
+                                    ${transaction.hash}
+                                </div>
+
+                            </div>
+
+                        `;
+                    }
+
+                }
+
+            } else {
+
+                transactionsHTML = `
+
+                    <div class="small">
+                        Транзакций нет
+                    </div>
+
+                `;
+
+            }
+
+
             div.innerHTML = `
 
                 <div class="block-number">
@@ -372,6 +673,8 @@ async function loadExplorer() {
                 <div class="small">
                     Время: ${date.toLocaleString()}
                 </div>
+
+                ${transactionsHTML}
 
             `;
 
@@ -414,3 +717,4 @@ loadExplorer();
 </body>
 
 </html>
+```
