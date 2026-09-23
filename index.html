@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>GlebusNet</title>
+
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #111827;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        .card {
+            width: 90%;
+            max-width: 420px;
+            padding: 30px;
+            box-sizing: border-box;
+            text-align: center;
+            background: #1f2937;
+            border-radius: 24px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #9ca3af;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            margin-top: 12px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .network {
+            background: #6366f1;
+            color: white;
+        }
+
+        .token {
+            background: #22c55e;
+            color: white;
+        }
+
+        #status {
+            margin-top: 20px;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <h1>GlebusNet</h1>
+
+    <p>Custom EVM blockchain network</p>
+
+    <button class="network" onclick="addNetwork()">
+        ⛽ Добавить GlebusNet
+    </button>
+
+    <button class="token" onclick="addToken()">
+        🪙 Добавить GLB
+    </button>
+
+    <div id="status"></div>
+
+</div>
+
+<script>
+
+const RPC = "https://glebusnet.onrender.com";
+
+const TOKEN =
+    "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+const GAS_LOGO =
+    "https://glebbb5029.github.io/GlebusNet/gas.png";
+
+const GLB_LOGO =
+    "https://glebbb5029.github.io/GlebusNet/glb.png";
+
+
+async function addNetwork() {
+
+    if (!window.ethereum) {
+
+        document.getElementById("status").innerText =
+            "MetaMask не найден";
+
+        return;
+    }
+
+    try {
+
+        await window.ethereum.request({
+
+            method: "wallet_addEthereumChain",
+
+            params: [{
+                chainId: "0x1E61",
+
+                chainName: "GlebusNet",
+
+                nativeCurrency: {
+                    name: "GAS",
+                    symbol: "GAS",
+                    decimals: 18
+                },
+
+                rpcUrls: [RPC]
+            }]
+
+        });
+
+        document.getElementById("status").innerText =
+            "GlebusNet добавлен!";
+
+    } catch (error) {
+
+        document.getElementById("status").innerText =
+            "Не удалось добавить сеть";
+
+        console.error(error);
+    }
+}
+
+
+async function addToken() {
+
+    if (!window.ethereum) {
+
+        document.getElementById("status").innerText =
+            "MetaMask не найден";
+
+        return;
+    }
+
+    try {
+
+        const added = await window.ethereum.request({
+
+            method: "wallet_watchAsset",
+
+            params: {
+
+                type: "ERC20",
+
+                options: {
+
+                    address: TOKEN,
+
+                    symbol: "GLB",
+
+                    decimals: 18,
+
+                    image: GLB_LOGO
+                }
+            }
+
+        });
+
+        if (added) {
+
+            document.getElementById("status").innerText =
+                "GLB добавлен в MetaMask!";
+
+        }
+
+    } catch (error) {
+
+        document.getElementById("status").innerText =
+            "Не удалось добавить GLB";
+
+        console.error(error);
+    }
+}
+
+</script>
+
+</body>
+</html>
