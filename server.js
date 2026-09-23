@@ -9,7 +9,7 @@ const RPC_PORT = 8545;
 // Публичный адрес кошелька.
 // Seed-фразу и приватный ключ сюда НЕ вставлять.
 const OWNER_ADDRESS =
-    ethers.getAddress("0xad7a139f228ae5214615eff5c4893de5ce7edee");
+    ethers.getAddress("0xad7a139f228ae5214615eff5c4893de5ce7edee0");
 
 // Количество GAS, которое отправляем владельцу
 const GAS_AMOUNT = ethers.parseEther("1");
