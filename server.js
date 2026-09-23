@@ -6,8 +6,10 @@ import { ethers } from "ethers";
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
 const RPC_PORT = 8545;
 
-// Первый тестовый аккаунт Hardhat.
-// НЕ используй этот ключ для реальных денег.
+// Публичный адрес кошелька, на который будут отправляться 100 000 GLB.
+// Сюда можно указывать ТОЛЬКО публичный адрес.
+// Seed-фразу и приватный ключ сюда НЕ вставлять.
+const OWNER_ADDRESS = "0x86605bd244F6718804D4e30F25c6B31e4D4F0528";
 
 console.log("Starting GlebusNet...");
 
@@ -57,42 +59,58 @@ async function deployToken() {
         wallet
     );
 
+    // Создаём 1 000 000 GLB
     const token = await factory.deploy(
         ethers.parseUnits("1000000", 18)
     );
 
     await token.waitForDeployment();
 
+    const tokenAddress = await token.getAddress();
+
+    // Отправляем 100 000 GLB на указанный кошелёк
+    const amount = ethers.parseUnits("100000", 18);
+
+    const tx = await token.transfer(
+        OWNER_ADDRESS,
+        amount
+    );
+
+    await tx.wait();
+
     console.log("=================================");
     console.log("GlebusNet started");
     console.log("Chain ID: 7777");
-    console.log("GLB token:", await token.getAddress());
+    console.log("GLB token:", tokenAddress);
+    console.log("100,000 GLB sent to:", OWNER_ADDRESS);
+    console.log("Transaction:", tx.hash);
     console.log("=================================");
 }
 
 async function start() {
     // Ждём запуска Hardhat
-   for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 30; i++) {
+        try {
+            const provider = new ethers.JsonRpcProvider(
+                `http://127.0.0.1:${RPC_PORT}`
+            );
+
+            await provider.getNetwork();
+
+            console.log("Hardhat RPC is ready");
+            break;
+        } catch {
+            console.log("Waiting for Hardhat RPC...");
+            await sleep(1000);
+        }
+
+        if (i === 29) {
+            throw new Error("Hardhat RPC did not start");
+        }
+    }
+
     try {
-        const provider = new ethers.JsonRpcProvider(
-            `http://127.0.0.1:${RPC_PORT}`
-        );
-
-        await provider.getNetwork();
-        console.log("Hardhat RPC is ready");
-        break;
-    } catch {
-        console.log("Waiting for Hardhat RPC...");
-        await sleep(1000);
-    }
-
-    if (i === 29) {
-        throw new Error("Hardhat RPC did not start");
-    }
-}
-
-try {
-    await deployToken();
+        await deployToken();
     } catch (error) {
         console.error("Token deployment failed:");
         console.error(error);
@@ -110,25 +128,37 @@ try {
                 headers: req.headers
             },
             (rpcRes) => {
-                res.writeHead(rpcRes.statusCode || 500, rpcRes.headers);
+                res.writeHead(
+                    rpcRes.statusCode || 500,
+                    rpcRes.headers
+                );
+
                 rpcRes.pipe(res);
             }
         );
 
         proxy.on("error", (error) => {
             console.error("RPC proxy error:", error);
+
             if (!res.headersSent) {
                 res.writeHead(502);
             }
+
             res.end("RPC unavailable");
         });
 
         req.pipe(proxy);
     });
 
-    server.listen(PUBLIC_PORT, "0.0.0.0", () => {
-        console.log(`GlebusNet RPC proxy listening on port ${PUBLIC_PORT}`);
-    });
+    server.listen(
+        PUBLIC_PORT,
+        "0.0.0.0",
+        () => {
+            console.log(
+                `GlebusNet RPC proxy listening on port ${PUBLIC_PORT}`
+            );
+        }
+    );
 }
 
 start();
