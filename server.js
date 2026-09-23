@@ -6,10 +6,13 @@ import { ethers } from "ethers";
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
 const RPC_PORT = 8545;
 
-// Публичный адрес кошелька, на который будут отправляться 100 000 GLB.
-// Сюда можно указывать ТОЛЬКО публичный адрес.
+// Публичный адрес кошелька.
 // Seed-фразу и приватный ключ сюда НЕ вставлять.
-const OWNER_ADDRESS = "0x250bb0ae3d85418e7d80cb2bfdc75c215eba953b";
+const OWNER_ADDRESS =
+    "0x250bb0ae3d85418e7d80cb2bfdc75c215eba953b";
+
+// Количество GAS, которое отправляем владельцу
+const GAS_AMOUNT = ethers.parseEther("1");
 
 console.log("Starting GlebusNet...");
 
@@ -68,7 +71,24 @@ async function deployToken() {
 
     const tokenAddress = await token.getAddress();
 
-    // Отправляем 100 000 GLB на указанный кошелёк
+    // =================================
+    // Отправляем 1 GAS
+    // =================================
+
+    const gasTx = await wallet.sendTransaction({
+        to: OWNER_ADDRESS,
+        value: GAS_AMOUNT
+    });
+
+    await gasTx.wait();
+
+    console.log("1 GAS sent to:", OWNER_ADDRESS);
+    console.log("GAS transaction:", gasTx.hash);
+
+    // =================================
+    // Отправляем 100 000 GLB
+    // =================================
+
     const amount = ethers.parseUnits("100000", 18);
 
     const tx = await token.transfer(
@@ -78,12 +98,21 @@ async function deployToken() {
 
     await tx.wait();
 
+    console.log("100,000 GLB sent to:", OWNER_ADDRESS);
+    console.log("GLB transaction:", tx.hash);
+
+    // =================================
+    // Итог
+    // =================================
+
     console.log("=================================");
     console.log("GlebusNet started");
     console.log("Chain ID: 7777");
     console.log("GLB token:", tokenAddress);
+    console.log("1 GAS sent to:", OWNER_ADDRESS);
     console.log("100,000 GLB sent to:", OWNER_ADDRESS);
-    console.log("Transaction:", tx.hash);
+    console.log("GAS transaction:", gasTx.hash);
+    console.log("GLB transaction:", tx.hash);
     console.log("=================================");
 }
 
