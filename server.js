@@ -9,7 +9,7 @@ const RPC_PORT = 8545;
 // Публичный адрес кошелька, на который будут отправляться 100 000 GLB.
 // Сюда можно указывать ТОЛЬКО публичный адрес.
 // Seed-фразу и приватный ключ сюда НЕ вставлять.
-const OWNER_ADDRESS = "0x86605bd244F6718804D4e30F25c6B31e4D4F0528";
+const OWNER_ADDRESS = "0x885436e361273f060e8f995761f1a5c69a0a2e17";
 
 console.log("Starting GlebusNet...");
 
