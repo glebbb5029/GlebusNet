@@ -4,33 +4,29 @@ const provider = new ethers.JsonRpcProvider(
     "https://glebusnet.onrender.com"
 );
 
-const TOKEN =
-    "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const privateKey =
+    "0xТУТ_НУЖЕН_ПРИВАТНЫЙ_КЛЮЧ_КОШЕЛЬКА_A";
 
-const FROM =
-    "0x605cd4AD0dA00423350b53922dB4f492e6d75c2B";
+const wallet =
+    new ethers.Wallet(privateKey, provider);
 
-const TO =
-    "0x86605bd244F6718804D4e30F25c6B31e4D4F0528";
+const token =
+    new ethers.Contract(
+        "0x5FbDB2315678afecb367f032d93f642f64180aa3",
+        [
+            "function transfer(address to, uint256 amount) returns (bool)"
+        ],
+        wallet
+    );
 
-const token = new ethers.Contract(
-    TOKEN,
-    [
-        "function transfer(address to, uint256 amount) returns (bool)"
-    ],
-    provider
-);
+const tx =
+    await token.transfer(
+        "0x082b947c2f7dac4a4d585ab7c715a0d66bc363f2",
+        ethers.parseUnits("1", 18)
+    );
 
-const amount = ethers.parseUnits("25", 18);
+console.log("TX:", tx.hash);
 
-const gas = await token.transfer.estimateGas(TO, amount);
+await tx.wait();
 
-console.log("Для перевода 25 GLB потребуется газа:", gas.toString());
-
-const feeData = await provider.getFeeData();
-
-console.log(
-    "Примерная комиссия:",
-    ethers.formatEther(gas * feeData.gasPrice),
-    "GLB"
-);
+console.log("Подтверждено!");

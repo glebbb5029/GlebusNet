@@ -1,1 +1,13 @@
+node_modules/
+cache/
 .env
+*.log
+check-accounts.js
+notepad check-accounts.js
+remove-token-account.js
+server.backup.js
+server.before-custom-chain.js
+server.before-persistence.js
+test-db.js
+test-neon.js
+test-persistence.js
