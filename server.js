@@ -30,7 +30,10 @@ const db = new Pool({
 });
 
 db.on("error", (error) => {
-    console.error("Neon pool error:", error.message);
+    console.error(
+        "Neon pool error:",
+        error.message
+    );
 });
 
 // =================================
@@ -49,14 +52,11 @@ const OWNER_ADDRESS =
         "0xad7a139f228ae5214615eff5c4893de5ce7edee0"
     );
 
-const GAS_AMOUNT =
-    ethers.parseEther("1");
-
 const INITIAL_SUPPLY =
-    ethers.parseUnits("1000000", 18);
-
-const OWNER_GLB_AMOUNT =
-    ethers.parseUnits("100000", 18);
+    ethers.parseUnits(
+        "1000000",
+        18
+    );
 
 const LOCAL_RPC =
     `http://127.0.0.1:${RPC_PORT}`;
@@ -227,8 +227,10 @@ async function saveTransaction(
         ]
     );
 
+    // =================================
     // Сохраняем raw-транзакцию
-    // только если она действительно есть.
+    // =================================
+
     if (
         rawTransaction &&
         typeof rawTransaction === "string" &&
@@ -545,7 +547,9 @@ async function persistTransaction(
     const token =
         tokenAddress.toLowerCase();
 
-    if (transactionTo !== token) {
+    if (
+        transactionTo !== token
+    ) {
         return;
     }
 
@@ -595,6 +599,21 @@ async function persistTransaction(
 // =================================
 // СОЗДАНИЕ БАЗОВОГО СОСТОЯНИЯ
 // =================================
+//
+// ВАЖНО:
+//
+// Здесь БОЛЬШЕ НЕТ:
+//
+// - отправки 1 GAS владельцу
+// - отправки 100 000 GLB владельцу
+//
+// Иначе при каждом рестарте состояние
+// начинало бы изменяться.
+//
+// Контракт всё равно создаётся заново,
+// но затем его состояние восстанавливается
+// непосредственно из Neon.
+//
 
 async function createBaseState() {
     const provider =
@@ -622,9 +641,12 @@ async function createBaseState() {
             INITIAL_SUPPLY
         );
 
-    const deploymentReceipt =
-        await token.deploymentTransaction()
-            .wait();
+    const deploymentTransaction =
+        token.deploymentTransaction();
+
+    if (deploymentTransaction) {
+        await deploymentTransaction.wait();
+    }
 
     await token.waitForDeployment();
 
@@ -636,230 +658,50 @@ async function createBaseState() {
         tokenAddress
     );
 
-    if (deploymentReceipt) {
+    if (deploymentTransaction) {
         await saveTransaction(
             provider,
-            deploymentReceipt.hash
+            deploymentTransaction.hash
         );
     }
-
-    // =================================
-    // 1 GAS владельцу
-    // =================================
-
-    const gasTx =
-        await wallet.sendTransaction({
-            to: OWNER_ADDRESS,
-            value: GAS_AMOUNT
-        });
-
-    await gasTx.wait();
-
-    console.log(
-        "Base state: 1 GAS sent to:",
-        OWNER_ADDRESS
-    );
-
-    await saveTransaction(
-        provider,
-        gasTx.hash
-    );
-
-    // =================================
-    // 100 000 GLB владельцу
-    // =================================
-
-    const tokenTx =
-        await token.transfer(
-            OWNER_ADDRESS,
-            OWNER_GLB_AMOUNT
-        );
-
-    await tokenTx.wait();
-
-    console.log(
-        "Base state: 100,000 GLB sent to:",
-        OWNER_ADDRESS
-    );
-
-    await saveTransaction(
-        provider,
-        tokenTx.hash
-    );
-
-    // =================================
-    // Состояние сети
-    // =================================
 
     await saveChainState(
         tokenAddress
     );
 
-    // =================================
-    // Владелец
-    // =================================
-
-    await saveAccount(
-        provider,
-        OWNER_ADDRESS
-    );
-
-    await saveTokenBalance(
-        tokenAddress,
-        OWNER_ADDRESS
-    );
-
     console.log(
-        "Base state saved to Neon."
+        "Base GLB contract created."
     );
 
     return tokenAddress;
 }
 
 // =================================
-// ВОССТАНОВЛЕНИЕ NONCE ВЛАДЕЛЬЦА
-// =================================
-//
-// ВАЖНО:
-// Мы больше НЕ используем hardhat_setNonce.
-//
-// Neon хранит следующий ожидаемый nonce владельца.
-// Если Hardhat после перезапуска имеет nonce меньше,
-// создаются технические 0-GAS транзакции через
-// impersonation, пока nonce не достигнет сохранённого.
-//
-// Первый запуск после старой ошибки:
-// Neon обычно содержит nonce 0,
-// поэтому targetNonce становится 1.
-// Это исправляет старый OKX nonce=1.
-//
-// После настоящих транзакций:
-// Neon будет хранить уже 2, 3, 4 и т.д.
-//
-
-async function restoreOwnerNonce() {
-    console.log("Restoring owner nonce...");
-
-    const provider = getProvider();
-
-    try {
-        const currentNonce = Number(
-            BigInt(
-                await provider.send(
-                    "eth_getTransactionCount",
-                    [OWNER_ADDRESS, "latest"]
-                )
-            )
-        );
-
-        console.log(
-            `Current owner nonce: ${currentNonce}`
-        );
-
-        if (currentNonce < 1) {
-            console.log(
-                "Owner nonce is 0. Synchronizing to nonce 1..."
-            );
-
-            await provider.send(
-                "hardhat_setNonce",
-                [
-                    OWNER_ADDRESS,
-                    "0x1"
-                ]
-            );
-
-            console.log(
-                "Owner nonce set to 1."
-            );
-        } else {
-            console.log(
-                `Owner nonce already >= 1: ${currentNonce}`
-            );
-        }
-
-        const finalNonce = Number(
-            BigInt(
-                await provider.send(
-                    "eth_getTransactionCount",
-                    [OWNER_ADDRESS, "latest"]
-                )
-            )
-        );
-
-        console.log(
-            `Owner nonce after restoration: ${finalNonce}`
-        );
-
-        await db.query(
-            `
-            INSERT INTO accounts (
-                address,
-                balance,
-                nonce
-            )
-            VALUES (
-                $1,
-                $2,
-                $3
-            )
-            ON CONFLICT (address)
-            DO UPDATE SET
-                nonce = EXCLUDED.nonce,
-                updated_at = NOW()
-            `,
-            [
-                OWNER_ADDRESS.toLowerCase(),
-                "0",
-                finalNonce
-            ]
-        );
-
-        console.log(
-            `Owner nonce saved to Neon: ${finalNonce}`
-        );
-
-    } catch (error) {
-        console.error(
-            "Failed to restore owner nonce:",
-            error.message
-        );
-    }
-}
-
-// =================================
-// ВОССТАНОВЛЕНИЕ RAW-ТРАНЗАКЦИЙ
+// ВОССТАНОВЛЕНИЕ GAS-БАЛАНСОВ И NONCE
 // =================================
 
-async function restoreRawTransactions(
-    tokenAddress
-) {
+async function restoreAccounts() {
     const provider =
         getProvider();
 
     console.log(
-        "Searching Neon for saved raw transactions..."
+        "Restoring accounts from Neon..."
     );
 
     const result =
         await db.query(
             `
             SELECT
-                id,
-                tx_hash,
-                raw_transaction,
-                block_number
-            FROM persisted_transactions
-            WHERE raw_transaction IS NOT NULL
-              AND LENGTH(raw_transaction) > 2
-            ORDER BY
-                block_number ASC NULLS FIRST,
-                id ASC
+                address,
+                balance,
+                nonce
+            FROM accounts
+            ORDER BY address ASC
             `
         );
 
     console.log(
-        `Found ${result.rows.length} saved raw transaction(s).`
+        `Found ${result.rows.length} saved account(s).`
     );
 
     for (
@@ -867,105 +709,236 @@ async function restoreRawTransactions(
         of result.rows
     ) {
         try {
-            const parsed =
-                ethers.Transaction.from(
-                    row.raw_transaction
+            const address =
+                ethers.getAddress(
+                    row.address
                 );
 
-            const from =
-                parsed.from;
+            const balance =
+                BigInt(
+                    row.balance
+                );
 
             const nonce =
-                parsed.nonce;
-
-            if (!from) {
-                console.log(
-                    `Skipping raw transaction without sender: ${row.tx_hash}`
+                Number(
+                    row.nonce
                 );
 
-                continue;
-            }
+            await provider.send(
+                "hardhat_setBalance",
+                [
+                    address,
+                    "0x" +
+                        balance.toString(16)
+                ]
+            );
 
             const currentNonce =
                 await provider.getTransactionCount(
-                    from,
+                    address,
                     "latest"
                 );
-
-            console.log(
-                `Raw transaction ${row.tx_hash}: nonce=${nonce}, current=${currentNonce}`
-            );
-
-            if (
-                currentNonce >
-                nonce
-            ) {
-                console.log(
-                    `Skipping ${row.tx_hash}: nonce already restored.`
-                );
-
-                continue;
-            }
 
             if (
                 currentNonce <
                 nonce
             ) {
-                console.log(
-                    `Skipping ${row.tx_hash}: waiting for nonce ${currentNonce}.`
-                );
-
-                continue;
-            }
-
-            const restoredHash =
                 await provider.send(
-                    "eth_sendRawTransaction",
+                    "hardhat_setNonce",
                     [
-                        row.raw_transaction
+                        address,
+                        "0x" +
+                            nonce.toString(16)
                     ]
                 );
-
-            console.log(
-                "Raw transaction restored:",
-                restoredHash
-            );
-
-            const receipt =
-                await provider.waitForTransaction(
-                    restoredHash
-                );
-
-            if (receipt) {
-                await persistTransaction(
-                    provider,
-                    restoredHash,
-                    row.raw_transaction,
-                    tokenAddress
-                );
             }
 
+            console.log(
+                `Account restored: ${address} | balance=${balance} | nonce=${nonce}`
+            );
         } catch (error) {
             console.error(
-                `Failed to restore raw transaction: ${row.tx_hash}`
-            );
-
-            console.error(
+                `Failed to restore account ${row.address}:`,
                 error.message
             );
         }
     }
 
     console.log(
-        "Raw transaction restoration completed."
+        "Account restoration completed."
     );
 }
 
 // =================================
-// ВОССТАНОВЛЕНИЕ GLB-ТРАНЗАКЦИЙ
+// ВОССТАНОВЛЕНИЕ GLB STORAGE
+// =================================
+//
+// GlebusToken:
+//
+// slot 0 = name
+// slot 1 = symbol
+// slot 2 = decimals
+// slot 3 = totalSupply
+// slot 4 = balanceOf mapping
+//
+// Для mapping:
+//
+// keccak256(
+//     abi.encode(walletAddress, 4)
+// )
+//
+// Hardhat позволяет напрямую записать
+// значение в storage контракта.
+//
+
+async function restoreTokenBalances(
+    tokenAddress
+) {
+    const provider =
+        getProvider();
+
+    console.log(
+        "Restoring GLB balances from Neon..."
+    );
+
+    const result =
+        await db.query(
+            `
+            SELECT
+                wallet_address,
+                balance
+            FROM token_balances
+            WHERE LOWER(token_address) = LOWER($1)
+            ORDER BY wallet_address ASC
+            `,
+            [tokenAddress]
+        );
+
+    console.log(
+        `Found ${result.rows.length} saved GLB balance(s).`
+    );
+
+    const BALANCE_MAPPING_SLOT = 4n;
+
+    let restoredTotal = 0n;
+
+    for (
+        const row
+        of result.rows
+    ) {
+        try {
+            const wallet =
+                ethers.getAddress(
+                    row.wallet_address
+                );
+
+            const balance =
+                BigInt(
+                    row.balance
+                );
+
+            const storageSlot =
+                ethers.keccak256(
+                    ethers.AbiCoder.defaultAbiCoder().encode(
+                        [
+                            "address",
+                            "uint256"
+                        ],
+                        [
+                            wallet,
+                            BALANCE_MAPPING_SLOT
+                        ]
+                    )
+                );
+
+            const storageValue =
+                ethers.zeroPadValue(
+                    ethers.toBeHex(
+                        balance
+                    ),
+                    32
+                );
+
+            await provider.send(
+                "hardhat_setStorageAt",
+                [
+                    tokenAddress,
+                    storageSlot,
+                    storageValue
+                ]
+            );
+
+            restoredTotal += balance;
+
+            console.log(
+    "DEBUG restoredTotal:",
+    restoredTotal.toString()
+);
+
+console.log(
+    "DEBUG INITIAL_SUPPLY:",
+    INITIAL_SUPPLY.toString()
+);
+
+            console.log(
+                `GLB restored: ${wallet} = ${ethers.formatUnits(balance, 18)} GLB`
+            );
+        } catch (error) {
+            console.error(
+                `Failed to restore GLB balance ${row.wallet_address}:`,
+                error.message
+            );
+        }
+    }
+
+    // =================================
+    // Восстанавливаем остаток GLB
+    // на Hardhat account #0
+    // =================================
+
+    const signer =
+        await provider.getSigner(0);
+
+    const signerAddress =
+        await signer.getAddress();
+
+    const remaining =
+        INITIAL_SUPPLY -
+        restoredTotal;
+
+    if (remaining > 0n) {
+    const owner = await hardhatProvider.getSigner(0);
+    const ownerAddress = await owner.getAddress();
+
+    const ownerSlot = ethers.keccak256(
+        ethers.concat([
+            ethers.zeroPadValue(ownerAddress, 32),
+            ethers.zeroPadValue("0x04", 32)
+        ])
+    );
+
+    await hardhatProvider.send("hardhat_setStorageAt", [
+        tokenAddress,
+        ownerSlot,
+        ethers.zeroPadValue(remaining, 32)
+    ]);
+
+    console.log(
+        `GLB remaining assigned to Hardhat account #0: ${ethers.formatUnits(remaining, 18)} GLB`
+    );
+} else if (remaining < 0n) {
+    console.log("WARNING: saved GLB balances exceed totalSupply.");
+}
+    console.log(
+        "GLB balance restoration completed."
+    );
+}
+
+// =================================
+// ПРОВЕРКА ВОССТАНОВЛЕННОГО СОСТОЯНИЯ
 // =================================
 
-async function restoreTransactions(
+async function verifyRestoredState(
     tokenAddress
 ) {
     const provider =
@@ -974,152 +947,55 @@ async function restoreTransactions(
     const artifact =
         getArtifact();
 
-    const iface =
-        new ethers.Interface([
-            "function transfer(address to,uint256 amount)"
-        ]);
+    const token =
+        new ethers.Contract(
+            tokenAddress,
+            artifact.abi,
+            provider
+        );
 
     console.log(
-        "Searching Neon for saved GLB transfers..."
+        "Verifying restored state..."
     );
 
-    const result =
-        await db.query(
-            `
-            SELECT
-                t.hash,
-                t.block_number,
-                t.from_address,
-                t.to_address,
-                t.data
-            FROM transactions t
-            LEFT JOIN persisted_transactions p
-                ON LOWER(p.tx_hash) = LOWER(t.hash)
-            WHERE t.block_number >= 4
-              AND t.to_address IS NOT NULL
-              AND LOWER(t.to_address) = LOWER($1)
-              AND t.data IS NOT NULL
-              AND LOWER(t.data) LIKE '0xa9059cbb%'
-              AND p.tx_hash IS NULL
-            ORDER BY t.block_number ASC
-            `,
-            [tokenAddress]
+    const ownerBalance =
+        await token.balanceOf(
+            OWNER_ADDRESS
         );
 
-    if (
-        result.rows.length === 0
-    ) {
-        console.log(
-            "No legacy GLB transactions to restore."
+    const ownerGas =
+        await provider.getBalance(
+            OWNER_ADDRESS
         );
 
-        return;
-    }
+    const ownerNonce =
+        await provider.getTransactionCount(
+            OWNER_ADDRESS,
+            "latest"
+        );
 
     console.log(
-        `Found ${result.rows.length} legacy GLB transaction(s).`
+        "Owner GAS:",
+        ethers.formatEther(
+            ownerGas
+        )
     );
 
-    const signer =
-        await provider.getSigner(0);
-
-    const signerAddress =
-        await signer.getAddress();
-
-    for (
-        const row
-        of result.rows
-    ) {
-        console.log(
-            "Restoring legacy GLB transaction:",
-            row.hash
-        );
-
-        try {
-            const decoded =
-                iface.decodeFunctionData(
-                    "transfer",
-                    row.data
-                );
-
-            const recipient =
-                ethers.getAddress(
-                    decoded[0]
-                );
-
-            const amount =
-                decoded[1];
-
-            const originalSender =
-                ethers.getAddress(
-                    row.from_address
-                );
-
-            if (
-                originalSender.toLowerCase() !==
-                signerAddress.toLowerCase()
-            ) {
-                console.log(
-                    "Skipped:",
-                    row.hash,
-                    "- sender is not Hardhat account #0"
-                );
-
-                continue;
-            }
-
-            const token =
-                new ethers.Contract(
-                    tokenAddress,
-                    artifact.abi,
-                    signer
-                );
-
-            const tx =
-                await token.transfer(
-                    recipient,
-                    amount
-                );
-
-            const receipt =
-                await tx.wait();
-
-            console.log(
-                "Restored GLB transfer:",
-                ethers.formatUnits(
-                    amount,
-                    18
-                ),
-                "GLB ->",
-                recipient
-            );
-
-            console.log(
-                "New transaction:",
-                receipt.hash
-            );
-
-            await persistTransaction(
-                provider,
-                receipt.hash,
-                null,
-                tokenAddress
-            );
-
-        } catch (error) {
-            console.error(
-                "Failed to restore legacy GLB transaction:",
-                row.hash
-            );
-
-            console.error(
-                error.message
-            );
-        }
-    }
+    console.log(
+        "Owner GLB:",
+        ethers.formatUnits(
+            ownerBalance,
+            18
+        )
+    );
 
     console.log(
-        "Legacy GLB transaction restoration completed."
+        "Owner nonce:",
+        ownerNonce
+    );
+
+    console.log(
+        "State verification completed."
     );
 }
 
@@ -1382,8 +1258,10 @@ async function handleRpcRequest(
                                             tokenAddress
                                         );
 
-                                        // Для владельца отдельно
-                                        // сохраняем актуальный nonce.
+                                        // =================================
+                                        // OWNER NONCE
+                                        // =================================
+
                                         const tx =
                                             await provider.getTransaction(
                                                 hash
@@ -1469,7 +1347,7 @@ async function start() {
     );
 
     // =================================
-    // Neon
+    // NEON
     // =================================
 
     try {
@@ -1485,13 +1363,15 @@ async function start() {
             "Failed to connect to Neon:"
         );
 
-        console.error(error);
+        console.error(
+            error
+        );
 
         process.exit(1);
     }
 
     // =================================
-    // Hardhat
+    // HARDHAT
     // =================================
 
     const hardhat =
@@ -1526,7 +1406,7 @@ async function start() {
     );
 
     // =================================
-    // Ждём Hardhat RPC
+    // ЖДЁМ HARDHAT RPC
     // =================================
 
     let rpcReady = false;
@@ -1577,7 +1457,7 @@ async function start() {
     }
 
     // =================================
-    // БАЗОВОЕ СОСТОЯНИЕ
+    // СОЗДАЁМ КОНТРАКТ
     // =================================
 
     try {
@@ -1585,40 +1465,30 @@ async function start() {
             await createBaseState();
 
         // =================================
-        // ВОССТАНОВЛЕНИЕ NONCE
+        // ВОССТАНАВЛИВАЕМ GAS + NONCE
         // =================================
 
-        await restoreOwnerNonce();
+        await restoreAccounts();
 
         // =================================
-        // RAW TRANSACTIONS
+        // ВОССТАНАВЛИВАЕМ GLB
         // =================================
 
-        await restoreRawTransactions(
+        await restoreTokenBalances(
             tokenAddress
         );
 
         // =================================
-        // СТАРЫЕ GLB
+        // ПРОВЕРКА
         // =================================
 
-        await restoreTransactions(
+        await verifyRestoredState(
             tokenAddress
         );
 
         // =================================
-        // ФИНАЛЬНАЯ СИНХРОНИЗАЦИЯ
+        // СОХРАНЯЕМ СОСТОЯНИЕ
         // =================================
-
-        await saveAccount(
-            getProvider(),
-            OWNER_ADDRESS
-        );
-
-        await saveTokenBalance(
-            tokenAddress,
-            OWNER_ADDRESS
-        );
 
         await saveChainState(
             tokenAddress
@@ -1653,7 +1523,9 @@ async function start() {
             "GlebusNet initialization failed:"
         );
 
-        console.error(error);
+        console.error(
+            error
+        );
 
         process.exit(1);
     }
