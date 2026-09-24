@@ -171,8 +171,12 @@ async function saveTransaction(
         );
 
     if (!transaction) {
-        return null;
-    }
+    console.error(
+        "SAVE TRANSACTION FAILED: transaction not found:",
+        txHash
+    );
+    return null;
+}
 
     const receipt =
         await provider.getTransactionReceipt(
@@ -180,8 +184,12 @@ async function saveTransaction(
         );
 
     if (!receipt) {
-        return null;
-    }
+    console.error(
+        "SAVE TRANSACTION FAILED: receipt not found:",
+        txHash
+    );
+    return null;
+}
 
     await db.query(
         `
@@ -226,7 +234,11 @@ async function saveTransaction(
             transaction.data ?? ""
         ]
     );
-
+console.log(
+    "Transaction saved to Neon:",
+    transaction.hash,
+    `block=${receipt.blockNumber}`
+);
     // =================================
     // Сохраняем raw-транзакцию
     // =================================
@@ -871,18 +883,9 @@ async function restoreTokenBalances(
             restoredTotal += balance;
 
             console.log(
-    "DEBUG restoredTotal:",
-    restoredTotal.toString()
-);
-
-console.log(
-    "DEBUG INITIAL_SUPPLY:",
-    INITIAL_SUPPLY.toString()
-);
-
-            console.log(
                 `GLB restored: ${wallet} = ${ethers.formatUnits(balance, 18)} GLB`
             );
+
         } catch (error) {
             console.error(
                 `Failed to restore GLB balance ${row.wallet_address}:`,
@@ -907,28 +910,46 @@ console.log(
         restoredTotal;
 
     if (remaining > 0n) {
-    const owner = await hardhatProvider.getSigner(0);
-    const ownerAddress = await owner.getAddress();
 
-    const ownerSlot = ethers.keccak256(
-        ethers.concat([
-            ethers.zeroPadValue(ownerAddress, 32),
-            ethers.zeroPadValue("0x04", 32)
-        ])
-    );
+        const ownerSlot =
+            ethers.keccak256(
+                ethers.concat([
+                    ethers.zeroPadValue(
+                        signerAddress,
+                        32
+                    ),
+                    ethers.zeroPadValue(
+                        "0x04",
+                        32
+                    )
+                ])
+            );
 
-    await hardhatProvider.send("hardhat_setStorageAt", [
-        tokenAddress,
-        ownerSlot,
-        ethers.zeroPadValue(remaining, 32)
-    ]);
+        await provider.send(
+            "hardhat_setStorageAt",
+            [
+                tokenAddress,
+                ownerSlot,
+                ethers.zeroPadValue(
+                    ethers.toBeHex(
+                        remaining
+                    ),
+                    32
+                )
+            ]
+        );
 
-    console.log(
-        `GLB remaining assigned to Hardhat account #0: ${ethers.formatUnits(remaining, 18)} GLB`
-    );
-} else if (remaining < 0n) {
-    console.log("WARNING: saved GLB balances exceed totalSupply.");
-}
+        console.log(
+            `GLB remaining assigned to Hardhat account #0: ${ethers.formatUnits(remaining, 18)} GLB`
+        );
+
+    } else if (remaining < 0n) {
+
+        console.log(
+            "WARNING: saved GLB balances exceed totalSupply."
+        );
+    }
+
     console.log(
         "GLB balance restoration completed."
     );
@@ -1405,14 +1426,14 @@ async function handleExplorerRequest(req, res) {
             }));
 
         // Определяем последний сохранённый блок
-        let latestBlock = 0;
+       let latestBlock = 0;
 
-        if (transactions.length > 0) {
-            latestBlock =
-                Number(
-                    transactions[0].blockNumber || 0
-                );
-        }
+try {
+    const provider = getProvider();
+    latestBlock = await provider.getBlockNumber();
+} catch (error) {
+    console.error("Explorer latest block error:", error);
+}
 
         // Создаём блоки из сохранённых транзакций
         const blocksMap = new Map();
@@ -1438,9 +1459,27 @@ async function handleExplorerRequest(req, res) {
         }
 
         const blocks =
-            Array.from(
-                blocksMap.values()
-            );
+    Array.from(
+        blocksMap.values()
+    ).filter(
+        block =>
+            Number(block.number) <= latestBlock
+    );
+
+// Добавляем текущий блок Hardhat,
+// даже если в Neon пока нет транзакций
+if (!blocksMap.has(latestBlock)) {
+    blocks.unshift({
+        number: latestBlock,
+        transactions: []
+    });
+}
+
+blocks.sort(
+    (a, b) =>
+        Number(b.number) -
+        Number(a.number)
+);
 
         // Отправляем результат Explorer
         res.writeHead(200, {
