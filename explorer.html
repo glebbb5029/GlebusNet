@@ -256,50 +256,19 @@
 
 <script>
 
-const RPC =
-    "https://glebusnet.onrender.com";
+const API =
+    "https://glebusnet.onrender.com/api/explorer";
 
 const GLB_CONTRACT =
     "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
-
-// Первые 4 байта функции transfer(address,uint256)
 const TRANSFER_SELECTOR =
     "0xa9059cbb";
 
 
-async function rpc(method, params = []) {
-
-    const response = await fetch(RPC, {
-
-        method: "POST",
-
-        headers: {
-            "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-
-            jsonrpc: "2.0",
-            id: 1,
-            method: method,
-            params: params
-
-        })
-
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-        throw new Error(data.error.message);
-    }
-
-    return data.result;
-}
-
-
-// Сокращаем длинный адрес
+/*
+    Сокращаем длинный адрес
+*/
 function shortAddress(address) {
 
     if (!address) {
@@ -314,21 +283,70 @@ function shortAddress(address) {
 }
 
 
-// Переводим hex в число
-function hexToBigInt(hex) {
+/*
+    Форматируем число GLB.
 
-    if (!hex || hex === "0x") {
-        return 0n;
+    Neon возвращает value как строку.
+    Поэтому здесь НЕ используем hexToBigInt.
+*/
+function formatGLB(value) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "0 GLB";
     }
 
-    return BigInt(hex);
+    const amount = BigInt(value);
+
+    const whole =
+        amount / 1000000000000000000n;
+
+    const fraction =
+        amount % 1000000000000000000n;
+
+    if (fraction === 0n) {
+
+        return (
+            whole.toLocaleString("en-US") +
+            " GLB"
+        );
+
+    }
+
+    const fractionString =
+        fraction
+            .toString()
+            .padStart(18, "0")
+            .replace(/0+$/, "");
+
+    return (
+        whole.toLocaleString("en-US") +
+        "." +
+        fractionString +
+        " GLB"
+    );
 }
 
 
-// Форматируем GAS
+/*
+    Форматируем GAS.
+
+    Neon также хранит value как строку.
+*/
 function formatGas(value) {
 
-    const wei = hexToBigInt(value);
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "0 GAS";
+    }
+
+    const wei = BigInt(value);
 
     const whole =
         wei / 1000000000000000000n;
@@ -355,49 +373,23 @@ function formatGas(value) {
 }
 
 
-// Форматируем GLB
-function formatGLB(value) {
-
-    const amount =
-        hexToBigInt(value);
-
-    const whole =
-        amount / 1000000000000000000n;
-
-    const fraction =
-        amount % 1000000000000000000n;
-
-    if (fraction === 0n) {
-        return whole.toLocaleString("en-US") + " GLB";
-    }
-
-    const fractionString =
-        fraction
-            .toString()
-            .padStart(18, "0")
-            .replace(/0+$/, "");
-
-    return (
-        whole.toLocaleString("en-US") +
-        "." +
-        fractionString +
-        " GLB"
-    );
-}
-
-
-// Пытаемся определить ERC-20 transfer
+/*
+    Определяем GLB transfer(address,uint256)
+*/
 function parseGLBTransfer(transaction) {
 
     if (!transaction.input) {
         return null;
     }
 
+    const input =
+        transaction.input.toLowerCase();
+
     if (
         transaction.to &&
         transaction.to.toLowerCase() ===
         GLB_CONTRACT.toLowerCase() &&
-        transaction.input.startsWith(TRANSFER_SELECTOR)
+        input.startsWith(TRANSFER_SELECTOR)
     ) {
 
         const data =
@@ -412,12 +404,14 @@ function parseGLBTransfer(transaction) {
             data.slice(24, 64);
 
         const amount =
-            "0x" +
-            data.slice(64, 128);
+            BigInt(
+                "0x" +
+                data.slice(64, 128)
+            );
 
         return {
-            recipient,
-            amount
+            recipient: recipient,
+            amount: amount
         };
     }
 
@@ -425,6 +419,129 @@ function parseGLBTransfer(transaction) {
 }
 
 
+/*
+    Создаём HTML одной транзакции
+*/
+function renderTransaction(transaction) {
+
+    const glbTransfer =
+        parseGLBTransfer(transaction);
+
+
+    /*
+        GLB перевод
+    */
+    if (glbTransfer) {
+
+        return `
+
+            <div class="transaction">
+
+                <div class="transaction-title">
+                    🔵 GLB перевод
+                </div>
+
+                <div class="amount glb">
+                    ${formatGLB(glbTransfer.amount.toString())}
+                </div>
+
+                <div class="small">
+                    From:
+                    ${shortAddress(transaction.from)}
+                </div>
+
+                <div class="small">
+                    To:
+                    ${shortAddress(glbTransfer.recipient)}
+                </div>
+
+                <div class="small">
+                    Tx:
+                    ${transaction.hash}
+                </div>
+
+            </div>
+
+        `;
+    }
+
+
+    /*
+        Обычный GAS перевод
+    */
+    if (
+        transaction.value &&
+        BigInt(transaction.value) !== 0n
+    ) {
+
+        return `
+
+            <div class="transaction">
+
+                <div class="transaction-title">
+                    🟡 GAS перевод
+                </div>
+
+                <div class="amount gas">
+                    ${formatGas(transaction.value)}
+                </div>
+
+                <div class="small">
+                    From:
+                    ${shortAddress(transaction.from)}
+                </div>
+
+                <div class="small">
+                    To:
+                    ${shortAddress(transaction.to)}
+                </div>
+
+                <div class="small">
+                    Tx:
+                    ${transaction.hash}
+                </div>
+
+            </div>
+
+        `;
+    }
+
+
+    /*
+        Контрактная транзакция
+    */
+    return `
+
+        <div class="transaction">
+
+            <div class="transaction-title">
+                ⚙️ Транзакция
+            </div>
+
+            <div class="small">
+                From:
+                ${shortAddress(transaction.from)}
+            </div>
+
+            <div class="small">
+                To:
+                ${shortAddress(transaction.to)}
+            </div>
+
+            <div class="small">
+                Tx:
+                ${transaction.hash}
+            </div>
+
+        </div>
+
+    `;
+}
+
+
+/*
+    Загружаем Explorer из Neon API
+*/
 async function loadExplorer() {
 
     const status =
@@ -432,6 +549,10 @@ async function loadExplorer() {
 
     const error =
         document.getElementById("error");
+
+    const blocksContainer =
+        document.getElementById("blocks");
+
 
     try {
 
@@ -441,205 +562,153 @@ async function loadExplorer() {
             "Подключение к GlebusNet...";
 
 
-        // Chain ID
-        const chainId =
-            await rpc("eth_chainId");
+        /*
+            Получаем историю из server.js → Neon
+        */
+        const response =
+            await fetch(API);
 
-        const chainIdNumber =
-            parseInt(chainId, 16);
+
+        if (!response.ok) {
+
+            throw new Error(
+                "HTTP ошибка: " +
+                response.status
+            );
+
+        }
 
 
-        document.getElementById("network").innerText =
+        const data =
+            await response.json();
+
+
+        if (data.error) {
+
+            throw new Error(
+                data.error
+            );
+
+        }
+
+
+        /*
+            GlebusNet
+        */
+        document.getElementById(
+            "network"
+        ).innerText =
             "GlebusNet";
 
-        document.getElementById("chainId").innerText =
-            chainIdNumber;
+
+        /*
+            Chain ID проекта
+        */
+        document.getElementById(
+            "chainId"
+        ).innerText =
+            "7777";
 
 
-        // Последний блок
-        const latestBlock =
-            await rpc("eth_blockNumber");
-
-        const latestNumber =
-            parseInt(latestBlock, 16);
-
-
-        document.getElementById("blockNumber").innerText =
-            latestNumber;
+        /*
+            Последний сохранённый блок
+        */
+        document.getElementById(
+            "blockNumber"
+        ).innerText =
+            data.latestBlock ?? "—";
 
 
-        // Контейнер блоков
-        const blocksContainer =
-            document.getElementById("blocks");
-
+        /*
+            Очищаем старые блоки
+        */
         blocksContainer.innerHTML = "";
 
 
-        const start =
-            Math.max(0, latestNumber - 9);
+        /*
+            API уже группирует транзакции по блокам.
+        */
+        const blocks =
+            Array.isArray(data.blocks)
+                ? data.blocks
+                : [];
 
 
-        // Загружаем последние 10 блоков
+        /*
+            Если истории нет
+        */
+        if (blocks.length === 0) {
+
+            blocksContainer.innerHTML = `
+
+                <div class="block">
+
+                    <div class="small">
+                        Сохранённых блоков пока нет.
+                    </div>
+
+                </div>
+
+            `;
+
+            status.innerText =
+                "● GlebusNet работает";
+
+            return;
+        }
+
+
+        /*
+            Сортируем блоки от новых к старым.
+        */
+        blocks.sort(
+            (a, b) =>
+                Number(b.number) -
+                Number(a.number)
+        );
+
+
+        /*
+            Показываем последние 10 сохранённых блоков.
+        */
+        const visibleBlocks =
+            blocks.slice(0, 10);
+
+
         for (
-            let number = latestNumber;
-            number >= start;
-            number--
+            const block
+            of visibleBlocks
         ) {
 
-            const hexNumber =
-                "0x" + number.toString(16);
+            const number =
+                Number(block.number);
 
 
-            const block =
-                await rpc(
-                    "eth_getBlockByNumber",
-                    [hexNumber, true]
-                );
-
-
-            const div =
-                document.createElement("div");
-
-            div.className = "block";
-
-
-            const timestamp =
-                parseInt(
-                    block.timestamp,
-                    16
-                );
-
-
-            const date =
-                new Date(
-                    timestamp * 1000
-                );
+            const transactions =
+                Array.isArray(block.transactions)
+                    ? block.transactions
+                    : [];
 
 
             let transactionsHTML = "";
 
 
+            /*
+                Транзакции блока
+            */
             if (
-                block.transactions &&
-                block.transactions.length > 0
+                transactions.length > 0
             ) {
 
                 for (
                     const transaction
-                    of block.transactions
+                    of transactions
                 ) {
 
-                    const glbTransfer =
-                        parseGLBTransfer(
+                    transactionsHTML +=
+                        renderTransaction(
                             transaction
                         );
-
-
-                    // Если это GLB transfer
-                    if (glbTransfer) {
-
-                        transactionsHTML += `
-
-                            <div class="transaction">
-
-                                <div class="transaction-title">
-                                    🔵 GLB перевод
-                                </div>
-
-                                <div class="amount glb">
-                                    ${formatGLB(glbTransfer.amount)}
-                                </div>
-
-                                <div class="small">
-                                    From:
-                                    ${shortAddress(transaction.from)}
-                                </div>
-
-                                <div class="small">
-                                    To:
-                                    ${shortAddress(glbTransfer.recipient)}
-                                </div>
-
-                                <div class="small">
-                                    Tx:
-                                    ${transaction.hash}
-                                </div>
-
-                            </div>
-
-                        `;
-
-                    }
-
-                    // Если это обычный GAS transfer
-                    else if (
-                        transaction.value &&
-                        transaction.value !== "0x0"
-                    ) {
-
-                        transactionsHTML += `
-
-                            <div class="transaction">
-
-                                <div class="transaction-title">
-                                    🟡 GAS перевод
-                                </div>
-
-                                <div class="amount gas">
-                                    ${formatGas(transaction.value)}
-                                </div>
-
-                                <div class="small">
-                                    From:
-                                    ${shortAddress(transaction.from)}
-                                </div>
-
-                                <div class="small">
-                                    To:
-                                    ${shortAddress(transaction.to)}
-                                </div>
-
-                                <div class="small">
-                                    Tx:
-                                    ${transaction.hash}
-                                </div>
-
-                            </div>
-
-                        `;
-
-                    }
-
-                    // Контрактная транзакция без обычного value
-                    else {
-
-                        transactionsHTML += `
-
-                            <div class="transaction">
-
-                                <div class="transaction-title">
-                                    ⚙️ Транзакция
-                                </div>
-
-                                <div class="small">
-                                    From:
-                                    ${shortAddress(transaction.from)}
-                                </div>
-
-                                <div class="small">
-                                    To:
-                                    ${shortAddress(transaction.to)}
-                                </div>
-
-                                <div class="small">
-                                    Tx:
-                                    ${transaction.hash}
-                                </div>
-
-                            </div>
-
-                        `;
-                    }
 
                 }
 
@@ -656,6 +725,19 @@ async function loadExplorer() {
             }
 
 
+            /*
+                Создаём блок
+            */
+            const div =
+                document.createElement(
+                    "div"
+                );
+
+
+            div.className =
+                "block";
+
+
             div.innerHTML = `
 
                 <div class="block-number">
@@ -663,15 +745,12 @@ async function loadExplorer() {
                 </div>
 
                 <div class="small">
-                    Hash: ${block.hash}
+                    Источник: Neon
                 </div>
 
                 <div class="small">
-                    Транзакций: ${block.transactions.length}
-                </div>
-
-                <div class="small">
-                    Время: ${date.toLocaleString()}
+                    Транзакций:
+                    ${transactions.length}
                 </div>
 
                 ${transactionsHTML}
@@ -679,7 +758,9 @@ async function loadExplorer() {
             `;
 
 
-            blocksContainer.appendChild(div);
+            blocksContainer.appendChild(
+                div
+            );
 
         }
 
@@ -689,18 +770,25 @@ async function loadExplorer() {
 
     }
 
+
     catch (e) {
 
         console.error(e);
 
+
         status.innerText =
             "Ошибка подключения";
+
 
         error.innerHTML = `
 
             <div class="error">
-                Не удалось подключиться к GlebusNet:<br><br>
+
+                Не удалось получить историю
+                GlebusNet:<br><br>
+
                 ${e.message}
+
             </div>
 
         `;
@@ -710,6 +798,9 @@ async function loadExplorer() {
 }
 
 
+/*
+    Первый запуск
+*/
 loadExplorer();
 
 </script>

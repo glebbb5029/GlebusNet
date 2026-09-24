@@ -1024,6 +1024,12 @@ async function handleRpcRequest(
     req,
     res
 ) {
+    if (
+        await handleExplorerRequest(req, res)
+    ) {
+        return;
+    }
+
     const chunks = [];
 
     req.on(
@@ -1339,6 +1345,146 @@ async function handleRpcRequest(
 // =================================
 // ЗАПУСК
 // =================================
+
+async function handleExplorerRequest(req, res) {
+    // Разрешаем запросы из браузера
+    res.setHeader(
+        "Access-Control-Allow-Origin",
+        "*"
+    );
+
+    res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET, OPTIONS"
+    );
+
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
+
+    // Обработка OPTIONS-запроса
+    if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return true;
+    }
+
+    // Обрабатываем только API Explorer
+    if (
+        req.method !== "GET" ||
+        !req.url.startsWith("/api/explorer")
+    ) {
+        return false;
+    }
+
+    try {
+        // Получаем сохранённые транзакции из Neon
+        const result = await db.query(`
+            SELECT
+                hash,
+                block_number,
+                from_address,
+                to_address,
+                value,
+                data
+            FROM transactions
+            ORDER BY block_number DESC
+            LIMIT 50
+        `);
+
+        // Преобразуем данные Neon
+        const transactions =
+            result.rows.map((tx) => ({
+                hash: tx.hash,
+                blockNumber: tx.block_number,
+                from: tx.from_address,
+                to: tx.to_address,
+                value: tx.value,
+                input: tx.data
+            }));
+
+        // Определяем последний сохранённый блок
+        let latestBlock = 0;
+
+        if (transactions.length > 0) {
+            latestBlock =
+                Number(
+                    transactions[0].blockNumber || 0
+                );
+        }
+
+        // Создаём блоки из сохранённых транзакций
+        const blocksMap = new Map();
+
+        for (const tx of transactions) {
+            const number =
+                Number(tx.blockNumber);
+
+            if (!blocksMap.has(number)) {
+                blocksMap.set(
+                    number,
+                    {
+                        number: number,
+                        transactions: []
+                    }
+                );
+            }
+
+            blocksMap
+                .get(number)
+                .transactions
+                .push(tx);
+        }
+
+        const blocks =
+            Array.from(
+                blocksMap.values()
+            );
+
+        // Отправляем результат Explorer
+        res.writeHead(200, {
+            "Content-Type":
+                "application/json; charset=utf-8"
+        });
+
+        res.end(
+            JSON.stringify({
+                latestBlock:
+                    latestBlock,
+
+                transactions:
+                    transactions,
+
+                blocks:
+                    blocks
+            })
+        );
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Explorer Neon API error:",
+            error
+        );
+
+        res.writeHead(500, {
+            "Content-Type":
+                "application/json; charset=utf-8"
+        });
+
+        res.end(
+            JSON.stringify({
+                error:
+                    "Не удалось получить историю из Neon"
+            })
+        );
+
+        return true;
+    }
+}
 
 async function start() {
 
