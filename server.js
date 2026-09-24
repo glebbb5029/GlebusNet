@@ -227,9 +227,13 @@ async function saveTransaction(
         ]
     );
 
-    // Сохраняем raw-транзакцию,
-    // если она у нас есть.
-    if (rawTransaction) {
+    // Сохраняем raw-транзакцию
+    // только если она действительно есть.
+    if (
+        rawTransaction &&
+        typeof rawTransaction === "string" &&
+        rawTransaction.length > 2
+    ) {
         await db.query(
             `
             INSERT INTO persisted_transactions (
@@ -336,7 +340,7 @@ async function saveTransaction(
 }
 
 // =================================
-// СОХРАНЕНИЕ GAS-БАЛАНСА
+// СОХРАНЕНИЕ GAS-БАЛАНСА И NONCE
 // =================================
 
 async function saveAccount(
@@ -363,7 +367,8 @@ async function saveAccount(
 
     const nonce =
         await provider.getTransactionCount(
-            normalized
+            normalized,
+            "latest"
         );
 
     await db.query(
@@ -518,13 +523,11 @@ async function persistTransaction(
         return;
     }
 
-    // GAS отправителя
     await saveAccount(
         provider,
         transaction.from
     );
 
-    // GAS получателя
     if (transaction.to) {
         await saveAccount(
             provider,
@@ -633,10 +636,6 @@ async function createBaseState() {
         tokenAddress
     );
 
-    // =================================
-    // Deployment
-    // =================================
-
     if (deploymentReceipt) {
         await saveTransaction(
             provider,
@@ -718,6 +717,251 @@ async function createBaseState() {
 }
 
 // =================================
+// ВОССТАНОВЛЕНИЕ NONCE ВЛАДЕЛЬЦА
+// =================================
+//
+// ВАЖНО:
+// Мы больше НЕ используем hardhat_setNonce.
+//
+// Neon хранит следующий ожидаемый nonce владельца.
+// Если Hardhat после перезапуска имеет nonce меньше,
+// создаются технические 0-GAS транзакции через
+// impersonation, пока nonce не достигнет сохранённого.
+//
+// Первый запуск после старой ошибки:
+// Neon обычно содержит nonce 0,
+// поэтому targetNonce становится 1.
+// Это исправляет старый OKX nonce=1.
+//
+// После настоящих транзакций:
+// Neon будет хранить уже 2, 3, 4 и т.д.
+//
+
+async function restoreOwnerNonce() {
+    console.log("Restoring owner nonce...");
+
+    const provider = getProvider();
+
+    try {
+        const currentNonce = Number(
+            BigInt(
+                await provider.send(
+                    "eth_getTransactionCount",
+                    [OWNER_ADDRESS, "latest"]
+                )
+            )
+        );
+
+        console.log(
+            `Current owner nonce: ${currentNonce}`
+        );
+
+        if (currentNonce < 1) {
+            console.log(
+                "Owner nonce is 0. Synchronizing to nonce 1..."
+            );
+
+            await provider.send(
+                "hardhat_setNonce",
+                [
+                    OWNER_ADDRESS,
+                    "0x1"
+                ]
+            );
+
+            console.log(
+                "Owner nonce set to 1."
+            );
+        } else {
+            console.log(
+                `Owner nonce already >= 1: ${currentNonce}`
+            );
+        }
+
+        const finalNonce = Number(
+            BigInt(
+                await provider.send(
+                    "eth_getTransactionCount",
+                    [OWNER_ADDRESS, "latest"]
+                )
+            )
+        );
+
+        console.log(
+            `Owner nonce after restoration: ${finalNonce}`
+        );
+
+        await db.query(
+            `
+            INSERT INTO accounts (
+                address,
+                balance,
+                nonce
+            )
+            VALUES (
+                $1,
+                $2,
+                $3
+            )
+            ON CONFLICT (address)
+            DO UPDATE SET
+                nonce = EXCLUDED.nonce,
+                updated_at = NOW()
+            `,
+            [
+                OWNER_ADDRESS.toLowerCase(),
+                "0",
+                finalNonce
+            ]
+        );
+
+        console.log(
+            `Owner nonce saved to Neon: ${finalNonce}`
+        );
+
+    } catch (error) {
+        console.error(
+            "Failed to restore owner nonce:",
+            error.message
+        );
+    }
+}
+
+// =================================
+// ВОССТАНОВЛЕНИЕ RAW-ТРАНЗАКЦИЙ
+// =================================
+
+async function restoreRawTransactions(
+    tokenAddress
+) {
+    const provider =
+        getProvider();
+
+    console.log(
+        "Searching Neon for saved raw transactions..."
+    );
+
+    const result =
+        await db.query(
+            `
+            SELECT
+                id,
+                tx_hash,
+                raw_transaction,
+                block_number
+            FROM persisted_transactions
+            WHERE raw_transaction IS NOT NULL
+              AND LENGTH(raw_transaction) > 2
+            ORDER BY
+                block_number ASC NULLS FIRST,
+                id ASC
+            `
+        );
+
+    console.log(
+        `Found ${result.rows.length} saved raw transaction(s).`
+    );
+
+    for (
+        const row
+        of result.rows
+    ) {
+        try {
+            const parsed =
+                ethers.Transaction.from(
+                    row.raw_transaction
+                );
+
+            const from =
+                parsed.from;
+
+            const nonce =
+                parsed.nonce;
+
+            if (!from) {
+                console.log(
+                    `Skipping raw transaction without sender: ${row.tx_hash}`
+                );
+
+                continue;
+            }
+
+            const currentNonce =
+                await provider.getTransactionCount(
+                    from,
+                    "latest"
+                );
+
+            console.log(
+                `Raw transaction ${row.tx_hash}: nonce=${nonce}, current=${currentNonce}`
+            );
+
+            if (
+                currentNonce >
+                nonce
+            ) {
+                console.log(
+                    `Skipping ${row.tx_hash}: nonce already restored.`
+                );
+
+                continue;
+            }
+
+            if (
+                currentNonce <
+                nonce
+            ) {
+                console.log(
+                    `Skipping ${row.tx_hash}: waiting for nonce ${currentNonce}.`
+                );
+
+                continue;
+            }
+
+            const restoredHash =
+                await provider.send(
+                    "eth_sendRawTransaction",
+                    [
+                        row.raw_transaction
+                    ]
+                );
+
+            console.log(
+                "Raw transaction restored:",
+                restoredHash
+            );
+
+            const receipt =
+                await provider.waitForTransaction(
+                    restoredHash
+                );
+
+            if (receipt) {
+                await persistTransaction(
+                    provider,
+                    restoredHash,
+                    row.raw_transaction,
+                    tokenAddress
+                );
+            }
+
+        } catch (error) {
+            console.error(
+                `Failed to restore raw transaction: ${row.tx_hash}`
+            );
+
+            console.error(
+                error.message
+            );
+        }
+    }
+
+    console.log(
+        "Raw transaction restoration completed."
+    );
+}
+
+// =================================
 // ВОССТАНОВЛЕНИЕ GLB-ТРАНЗАКЦИЙ
 // =================================
 
@@ -739,25 +983,25 @@ async function restoreTransactions(
         "Searching Neon for saved GLB transfers..."
     );
 
-    // Берём именно transactions,
-    // потому что eth_sendTransaction
-    // не обязательно имеет raw_transaction.
     const result =
         await db.query(
             `
             SELECT
-                hash,
-                block_number,
-                from_address,
-                to_address,
-                data
-            FROM transactions
-            WHERE block_number >= 4
-              AND to_address IS NOT NULL
-              AND LOWER(to_address) = LOWER($1)
-              AND data IS NOT NULL
-              AND LOWER(data) LIKE '0xa9059cbb%'
-            ORDER BY block_number ASC
+                t.hash,
+                t.block_number,
+                t.from_address,
+                t.to_address,
+                t.data
+            FROM transactions t
+            LEFT JOIN persisted_transactions p
+                ON LOWER(p.tx_hash) = LOWER(t.hash)
+            WHERE t.block_number >= 4
+              AND t.to_address IS NOT NULL
+              AND LOWER(t.to_address) = LOWER($1)
+              AND t.data IS NOT NULL
+              AND LOWER(t.data) LIKE '0xa9059cbb%'
+              AND p.tx_hash IS NULL
+            ORDER BY t.block_number ASC
             `,
             [tokenAddress]
         );
@@ -766,17 +1010,16 @@ async function restoreTransactions(
         result.rows.length === 0
     ) {
         console.log(
-            "No external GLB transactions to restore."
+            "No legacy GLB transactions to restore."
         );
 
         return;
     }
 
     console.log(
-        `Found ${result.rows.length} saved GLB transaction(s).`
+        `Found ${result.rows.length} legacy GLB transaction(s).`
     );
 
-    // Получаем Hardhat signer #0.
     const signer =
         await provider.getSigner(0);
 
@@ -788,7 +1031,7 @@ async function restoreTransactions(
         of result.rows
     ) {
         console.log(
-            "Restoring GLB transaction:",
+            "Restoring legacy GLB transaction:",
             row.hash
         );
 
@@ -812,13 +1055,6 @@ async function restoreTransactions(
                     row.from_address
                 );
 
-            // =================================
-            // В текущей архитектуре мы можем
-            // воспроизвести транзакцию только
-            // если её отправитель контролируется
-            // Hardhat.
-            // =================================
-
             if (
                 originalSender.toLowerCase() !==
                 signerAddress.toLowerCase()
@@ -831,10 +1067,6 @@ async function restoreTransactions(
 
                 continue;
             }
-
-            // =================================
-            // Выполняем transfer заново.
-            // =================================
 
             const token =
                 new ethers.Contract(
@@ -867,7 +1099,6 @@ async function restoreTransactions(
                 receipt.hash
             );
 
-            // Сохраняем новую транзакцию.
             await persistTransaction(
                 provider,
                 receipt.hash,
@@ -877,7 +1108,7 @@ async function restoreTransactions(
 
         } catch (error) {
             console.error(
-                "Failed to restore GLB transaction:",
+                "Failed to restore legacy GLB transaction:",
                 row.hash
             );
 
@@ -888,7 +1119,7 @@ async function restoreTransactions(
     }
 
     console.log(
-        "GLB transaction restoration completed."
+        "Legacy GLB transaction restoration completed."
     );
 }
 
@@ -1130,7 +1361,9 @@ async function handleRpcRequest(
                                                 break;
                                             }
 
-                                            await sleep(100);
+                                            await sleep(
+                                                100
+                                            );
                                         }
 
                                         if (!receipt) {
@@ -1148,6 +1381,35 @@ async function handleRpcRequest(
                                             tracked.raw,
                                             tokenAddress
                                         );
+
+                                        // Для владельца отдельно
+                                        // сохраняем актуальный nonce.
+                                        const tx =
+                                            await provider.getTransaction(
+                                                hash
+                                            );
+
+                                        if (
+                                            tx &&
+                                            tx.from &&
+                                            tx.from.toLowerCase() ===
+                                                OWNER_ADDRESS.toLowerCase()
+                                        ) {
+                                            await saveAccount(
+                                                provider,
+                                                OWNER_ADDRESS
+                                            );
+
+                                            const newNonce =
+                                                await provider.getTransactionCount(
+                                                    OWNER_ADDRESS,
+                                                    "latest"
+                                                );
+
+                                            console.log(
+                                                `Owner nonce saved after transaction: ${newNonce}`
+                                            );
+                                        }
 
                                         console.log(
                                             "Persisted:",
@@ -1180,7 +1442,9 @@ async function handleRpcRequest(
                     if (
                         !res.headersSent
                     ) {
-                        res.writeHead(502);
+                        res.writeHead(
+                            502
+                        );
                     }
 
                     res.end(
@@ -1300,7 +1564,9 @@ async function start() {
                 "Waiting for Hardhat RPC..."
             );
 
-            await sleep(1000);
+            await sleep(
+                1000
+            );
         }
     }
 
@@ -1311,7 +1577,7 @@ async function start() {
     }
 
     // =================================
-    // Базовое состояние
+    // БАЗОВОЕ СОСТОЯНИЕ
     // =================================
 
     try {
@@ -1319,8 +1585,21 @@ async function start() {
             await createBaseState();
 
         // =================================
-        // ВОССТАНАВЛИВАЕМ TRANSACTIONS
-        // ИЗ NEON
+        // ВОССТАНОВЛЕНИЕ NONCE
+        // =================================
+
+        await restoreOwnerNonce();
+
+        // =================================
+        // RAW TRANSACTIONS
+        // =================================
+
+        await restoreRawTransactions(
+            tokenAddress
+        );
+
+        // =================================
+        // СТАРЫЕ GLB
         // =================================
 
         await restoreTransactions(
@@ -1328,7 +1607,7 @@ async function start() {
         );
 
         // =================================
-        // Финальная синхронизация
+        // ФИНАЛЬНАЯ СИНХРОНИЗАЦИЯ
         // =================================
 
         await saveAccount(
@@ -1380,7 +1659,7 @@ async function start() {
     }
 
     // =================================
-    // Публичный RPC
+    // ПУБЛИЧНЫЙ RPC
     // =================================
 
     const server =
