@@ -143,6 +143,12 @@
             color: #60a5fa;
         }
 
+        .transaction-time {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
         .error {
             background: #450a0a;
             color: #fca5a5;
@@ -307,6 +313,48 @@ function shortAddress(address) {
 
 
 /*
+    Форматируем время блока.
+    timestamp хранится в Unix-времени (секунды).
+*/
+function formatTransactionTime(timestamp) {
+
+    if (
+        timestamp === null ||
+        timestamp === undefined ||
+        timestamp === ""
+    ) {
+        return "Время: —";
+    }
+
+    const timestampNumber =
+        Number(timestamp);
+
+    if (!Number.isFinite(timestampNumber)) {
+        return "Время: —";
+    }
+
+    const date =
+        new Date(timestampNumber * 1000);
+
+    if (Number.isNaN(date.getTime())) {
+        return "Время: —";
+    }
+
+    return (
+        "Время: " +
+        date.toLocaleString("ru-RU", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+        })
+    );
+}
+
+
+/*
     Форматируем число GLB.
 
     Neon возвращает value как строку.
@@ -432,6 +480,10 @@ function renderTransaction(transaction) {
                     ${formatGLB(transaction.tokenAmount)}
                 </div>
 
+                <div class="transaction-time">
+                    ${formatTransactionTime(transaction.timestamp)}
+                </div>
+
                 <div class="small">
                     From:
                     ${shortAddress(transaction.from)}
@@ -481,6 +533,10 @@ function renderTransaction(transaction) {
                     ${formatGas(transaction.value)}
                 </div>
 
+                <div class="transaction-time">
+                    ${formatTransactionTime(transaction.timestamp)}
+                </div>
+
                 <div class="small">
                     From:
                     ${shortAddress(transaction.from)}
@@ -511,6 +567,10 @@ function renderTransaction(transaction) {
 
             <div class="transaction-title">
                 ⚙️ Транзакция
+            </div>
+
+            <div class="transaction-time">
+                ${formatTransactionTime(transaction.timestamp)}
             </div>
 
             <div class="small">
@@ -675,6 +735,10 @@ async function loadExplorer() {
             blocks.slice(0, 10);
 
 
+        /*
+            Привязываем timestamp блока
+            к каждой транзакции внутри него.
+        */
         for (const block of blocks) {
 
             block.transactions =
@@ -683,6 +747,13 @@ async function loadExplorer() {
                         Number(tx.blockNumber) ===
                         Number(block.number)
                 );
+
+            for (const transaction of block.transactions) {
+
+                transaction.timestamp =
+                    block.timestamp;
+
+            }
 
         }
 
