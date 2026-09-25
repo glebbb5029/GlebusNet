@@ -257,7 +257,7 @@
 <script>
 
 const API =
-    "https://glebusnet.onrender.com/api/explorer";
+    "http://127.0.0.1:3000/api/explorer";
 
 const GLB_CONTRACT =
     "0x5FbDB2315678afecb367f032d93F642f64180aa3";
@@ -376,62 +376,22 @@ function formatGas(value) {
 /*
     Определяем GLB transfer(address,uint256)
 */
-function parseGLBTransfer(transaction) {
-
-    if (!transaction.input) {
-        return null;
-    }
-
-    const input =
-        transaction.input.toLowerCase();
-
-    if (
-        transaction.to &&
-        transaction.to.toLowerCase() ===
-        GLB_CONTRACT.toLowerCase() &&
-        input.startsWith(TRANSFER_SELECTOR)
-    ) {
-
-        const data =
-            transaction.input.slice(10);
-
-        if (data.length < 128) {
-            return null;
-        }
-
-        const recipient =
-            "0x" +
-            data.slice(24, 64);
-
-        const amount =
-            BigInt(
-                "0x" +
-                data.slice(64, 128)
-            );
-
-        return {
-            recipient: recipient,
-            amount: amount
-        };
-    }
-
-    return null;
-}
-
 
 /*
     Создаём HTML одной транзакции
 */
 function renderTransaction(transaction) {
 
-    const glbTransfer =
-        parseGLBTransfer(transaction);
-
-
     /*
-        GLB перевод
+        GLB перевод.
+        Сервер уже декодировал ERC-20 transfer
+        и передал готовые данные.
     */
-    if (glbTransfer) {
+    if (
+        transaction.isTokenTransfer &&
+        transaction.tokenAmount !== undefined &&
+        transaction.tokenAmount !== null
+    ) {
 
         return `
 
@@ -442,7 +402,7 @@ function renderTransaction(transaction) {
                 </div>
 
                 <div class="amount glb">
-                    ${formatGLB(glbTransfer.amount.toString())}
+                    ${formatGLB(transaction.tokenAmount)}
                 </div>
 
                 <div class="small">
@@ -452,7 +412,7 @@ function renderTransaction(transaction) {
 
                 <div class="small">
                     To:
-                    ${shortAddress(glbTransfer.recipient)}
+                    ${shortAddress(transaction.tokenRecipient)}
                 </div>
 
                 <div class="small">
@@ -508,7 +468,7 @@ function renderTransaction(transaction) {
 
 
     /*
-        Контрактная транзакция
+        Обычная контрактная транзакция
     */
     return `
 
@@ -632,6 +592,11 @@ async function loadExplorer() {
             Array.isArray(data.blocks)
                 ? data.blocks
                 : [];
+                
+        const allTransactions =
+    Array.isArray(data.transactions)
+        ? data.transactions
+        : [];
 
 
         /*
@@ -674,6 +639,16 @@ async function loadExplorer() {
         const visibleBlocks =
             blocks.slice(0, 10);
 
+        for (const block of blocks) {
+
+    block.transactions =
+        allTransactions.filter(
+            tx =>
+                Number(tx.blockNumber) ===
+                Number(block.number)
+        );
+
+}
 
         for (
             const block

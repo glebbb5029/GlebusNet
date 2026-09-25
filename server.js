@@ -1368,30 +1368,16 @@ async function handleRpcRequest(
 // =================================
 
 async function handleExplorerRequest(req, res) {
-    // Разрешаем запросы из браузера
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        "*"
-    );
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-    res.setHeader(
-        "Access-Control-Allow-Methods",
-        "GET, OPTIONS"
-    );
-
-    res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type"
-    );
-
-    // Обработка OPTIONS-запроса
     if (req.method === "OPTIONS") {
         res.writeHead(204);
         res.end();
         return true;
     }
 
-    // Обрабатываем только API Explorer
     if (
         req.method !== "GET" ||
         !req.url.startsWith("/api/explorer")
@@ -1400,7 +1386,43 @@ async function handleExplorerRequest(req, res) {
     }
 
     try {
-        // Получаем сохранённые транзакции из Neon
+        // Текущий блок локального Hardhat
+        let latestBlock = 0;
+
+        try {
+            const provider = getProvider();
+            latestBlock = await provider.getBlockNumber();
+        } catch (error) {
+            console.error(
+                "Explorer latest block error:",
+                error
+            );
+        }
+
+        // Получаем адрес GLB
+        let tokenAddress = null;
+
+        try {
+            const chainState = await db.query(`
+                SELECT token_address
+                FROM chain_state
+                LIMIT 1
+            `);
+
+            if (chainState.rows.length > 0) {
+                tokenAddress =
+                    chainState.rows[0].token_address;
+            }
+        } catch (error) {
+            console.error(
+                "Explorer token address error:",
+                error
+            );
+        }
+
+        // Получаем сохранённые транзакции из Neon.
+        // Историю НЕ ограничиваем текущим Hardhat-блоком,
+        // потому что Neon хранит историю прошлых запусков.
         const result = await db.query(`
             SELECT
                 hash,
@@ -1414,28 +1436,54 @@ async function handleExplorerRequest(req, res) {
             LIMIT 50
         `);
 
-        // Преобразуем данные Neon
-        const transactions =
-            result.rows.map((tx) => ({
+        const iface = new ethers.Interface([
+            "function transfer(address to, uint256 amount)"
+        ]);
+
+        const transactions = result.rows.map((tx) => {
+            let tokenAmount = null;
+            let tokenRecipient = null;
+            let tokenSymbol = null;
+            let isTokenTransfer = false;
+
+            try {
+                if (
+                    tx.data &&
+                    tx.data.startsWith("0xa9059cbb")
+                ) {
+                    const decoded =
+                        iface.decodeFunctionData(
+                            "transfer",
+                            tx.data
+                        );
+
+                    tokenRecipient = decoded[0];
+                    tokenAmount = decoded[1].toString();
+                    tokenSymbol = "GLB";
+                    isTokenTransfer = true;
+                }
+            } catch (error) {
+                console.error(
+                    "Explorer token decode error:",
+                    error
+                );
+            }
+
+            return {
                 hash: tx.hash,
                 blockNumber: tx.block_number,
                 from: tx.from_address,
                 to: tx.to_address,
                 value: tx.value,
+                tokenAmount: tokenAmount,
+                tokenRecipient: tokenRecipient,
+                tokenSymbol: tokenSymbol,
+                isTokenTransfer: isTokenTransfer,
                 input: tx.data
-            }));
+            };
+        });
 
-        // Определяем последний сохранённый блок
-       let latestBlock = 0;
-
-try {
-    const provider = getProvider();
-    latestBlock = await provider.getBlockNumber();
-} catch (error) {
-    console.error("Explorer latest block error:", error);
-}
-
-        // Создаём блоки из сохранённых транзакций
+        // Собираем блоки из сохранённой истории
         const blocksMap = new Map();
 
         for (const tx of transactions) {
@@ -1458,30 +1506,80 @@ try {
                 .push(tx);
         }
 
+        // Получаем сохранённые блоки из Neon
+        try {
+            const savedBlocks = await db.query(`
+                SELECT
+                    number,
+                    hash,
+                    parent_hash,
+                    timestamp,
+                    data
+                FROM blocks
+                ORDER BY number DESC
+                LIMIT 50
+            `);
+
+            for (const block of savedBlocks.rows) {
+                const number =
+                    Number(block.number);
+
+                if (!blocksMap.has(number)) {
+                    blocksMap.set(
+                        number,
+                        {
+                            number: number,
+                            hash: block.hash,
+                            parentHash: block.parent_hash,
+                            timestamp: block.timestamp,
+                            data: block.data,
+                            transactions: []
+                        }
+                    );
+                } else {
+                    const existing =
+                        blocksMap.get(number);
+
+                    existing.hash =
+                        block.hash;
+
+                    existing.parentHash =
+                        block.parent_hash;
+
+                    existing.timestamp =
+                        block.timestamp;
+
+                    existing.data =
+                        block.data;
+                }
+            }
+        } catch (error) {
+            console.error(
+                "Explorer blocks error:",
+                error
+            );
+        }
+
         const blocks =
-    Array.from(
-        blocksMap.values()
-    ).filter(
-        block =>
-            Number(block.number) <= latestBlock
-    );
+            Array.from(blocksMap.values())
+                .sort(
+                    (a, b) =>
+                        Number(b.number) -
+                        Number(a.number)
+                );
 
-// Добавляем текущий блок Hardhat,
-// даже если в Neon пока нет транзакций
-if (!blocksMap.has(latestBlock)) {
-    blocks.unshift({
-        number: latestBlock,
-        transactions: []
-    });
-}
+        // Если текущего локального блока ещё нет
+        // в сохранённой истории — добавляем его.
+        if (
+            latestBlock > 0 &&
+            !blocksMap.has(latestBlock)
+        ) {
+            blocks.unshift({
+                number: latestBlock,
+                transactions: []
+            });
+        }
 
-blocks.sort(
-    (a, b) =>
-        Number(b.number) -
-        Number(a.number)
-);
-
-        // Отправляем результат Explorer
         res.writeHead(200, {
             "Content-Type":
                 "application/json; charset=utf-8"
@@ -1489,21 +1587,16 @@ blocks.sort(
 
         res.end(
             JSON.stringify({
-                latestBlock:
-                    latestBlock,
-
-                transactions:
-                    transactions,
-
-                blocks:
-                    blocks
+                latestBlock: latestBlock,
+                tokenAddress: tokenAddress,
+                transactions: transactions,
+                blocks: blocks
             })
         );
 
         return true;
 
     } catch (error) {
-
         console.error(
             "Explorer Neon API error:",
             error
