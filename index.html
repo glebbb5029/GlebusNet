@@ -1,213 +1,292 @@
-<!DOCTYPE html>
-<html lang="ru">
-
-<head>
+<!DOCTYPE html><html lang="ru"><head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GlebusNet</title>
 
-    <title>GlebusNet</title>
+<style>
 
-    <style>
+    body {
+        margin: 0;
+        min-height: 100vh;
 
-        body {
-            margin: 0;
-            min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
 
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        background: #111827;
+        color: white;
 
-            background: #111827;
-            color: white;
+        font-family: Arial, sans-serif;
+    }
 
-            font-family: Arial, sans-serif;
-        }
+    .card {
+        width: 90%;
+        max-width: 420px;
 
-        .card {
-            width: 90%;
-            max-width: 420px;
+        padding: 30px;
+        box-sizing: border-box;
 
-            padding: 30px;
-            box-sizing: border-box;
+        text-align: center;
 
-            text-align: center;
+        background: #1f2937;
+        border-radius: 24px;
+    }
 
-            background: #1f2937;
-            border-radius: 24px;
-        }
+    .logos {
+        display: flex;
+        justify-content: center;
+        align-items: center;
 
-        .logos {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        gap: 15px;
 
-            gap: 15px;
+        margin-bottom: 20px;
+    }
 
-            margin-bottom: 20px;
-        }
+    .logo {
+        width: 70px;
+        height: 70px;
 
-        .logo {
-            width: 70px;
-            height: 70px;
+        border-radius: 16px;
 
-            border-radius: 16px;
+        object-fit: contain;
+    }
 
-            object-fit: contain;
-        }
+    h1 {
+        margin-bottom: 10px;
+    }
 
-        h1 {
-            margin-bottom: 10px;
-        }
+    p {
+        color: #9ca3af;
+    }
 
-        p {
-            color: #9ca3af;
-        }
+    button {
+        width: 100%;
 
-        button {
-            width: 100%;
+        padding: 16px;
+        margin-top: 12px;
 
-            padding: 16px;
-            margin-top: 12px;
+        border: none;
+        border-radius: 12px;
 
-            border: none;
-            border-radius: 12px;
+        font-size: 16px;
+        font-weight: bold;
 
-            font-size: 16px;
-            font-weight: bold;
+        cursor: pointer;
+    }
 
-            cursor: pointer;
-        }
+    .network {
+        background: #6366f1;
+        color: white;
+    }
 
-        .network {
-            background: #6366f1;
-            color: white;
-        }
+    .token {
+        background: #22c55e;
+        color: white;
+    }
 
-        .token {
-            background: #22c55e;
-            color: white;
-        }
+    .connect {
+        background: #374151;
+        color: white;
+    }
 
-        #status {
-            margin-top: 20px;
+    #status {
+        margin-top: 20px;
 
-            color: #9ca3af;
+        color: #9ca3af;
 
-            font-size: 14px;
+        font-size: 14px;
 
-            word-break: break-word;
-        }
+        word-break: break-word;
+    }
 
-    </style>
+</style>
 
-</head>
+</head><body><div class="card"><div class="logos">
 
-
-<body>
-
-
-<div class="card">
-
-
-    <div class="logos">
-
-        <img
-            class="logo"
-            src="https://i.ibb.co/678kxQYb/file-00000000e5148246988e64699e30801e.png"
-            alt="GAS"
-        >
-
-        <img
-            class="logo"
-            src="https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png"
-            alt="GLB"
-        >
-
-    </div>
-
-
-    <h1>GlebusNet</h1>
-
-    <p>
-        Custom EVM blockchain network
-    </p>
-
-
-    <button
-        class="network"
-        onclick="addNetwork()"
+    <img
+        class="logo"
+        src="https://i.ibb.co/678kxQYb/file-00000000e5148246988e64699e30801e.png"
+        alt="GAS"
     >
-        ⛽ Добавить GlebusNet
-    </button>
 
-
-    <button
-        class="token"
-        onclick="addToken()"
+    <img
+        class="logo"
+        src="https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png"
+        alt="GLB"
     >
-        🪙 Добавить GLB
-    </button>
-
-
-    <div id="status"></div>
-
 
 </div>
 
+<h1>GlebusNet</h1>
 
+<p>
+    Custom EVM blockchain network
+</p>
 
-<script>
+<button
+    class="connect"
+    onclick="connectWallet()"
+>
+    🔗 Подключить OKX Wallet
+</button>
 
+<button
+    class="network"
+    onclick="addNetwork()"
+>
+    ⛽ Добавить GlebusNet
+</button>
+
+<button
+    class="token"
+    onclick="addToken()"
+>
+    🪙 Добавить GLB
+</button>
+
+<div id="status"></div>
+
+</div><script>
 
 const RPC =
     "https://glebusnet.onrender.com";
 
-
 const CHAIN_ID =
     "0x1E61";
-
 
 const TOKEN =
     "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
+const GAS_LOGO =
+    "https://i.ibb.co/678kxQYb/file-00000000e5148246988e64699e30801e.png";
 
 const GLB_LOGO =
     "https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png";
 
 
+/*
+    Получаем именно OKX Wallet.
 
-async function addNetwork() {
+    OKX официально предоставляет EVM provider
+    через window.okxwallet.
+*/
 
-    if (!window.ethereum) {
+function getOKXWallet() {
+
+    if (
+        window.okxwallet &&
+        typeof window.okxwallet.request === "function"
+    ) {
+        return window.okxwallet;
+    }
+
+    return null;
+}
+
+
+/*
+    Подключение OKX Wallet
+*/
+
+async function connectWallet() {
+
+    const wallet =
+        getOKXWallet();
+
+    if (!wallet) {
 
         document.getElementById("status").innerText =
-            "MetaMask не найден. Откройте страницу через MetaMask.";
+            "OKX Wallet не найден. Откройте эту страницу через OKX Wallet.";
 
         return;
     }
 
+    try {
+
+        const accounts =
+            await wallet.request({
+                method: "eth_requestAccounts"
+            });
+
+        if (
+            accounts &&
+            accounts.length > 0
+        ) {
+
+            document.getElementById("status").innerText =
+                "OKX Wallet подключён:\n" +
+                accounts[0];
+
+        } else {
+
+            document.getElementById("status").innerText =
+                "Кошелёк не вернул адрес.";
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("status").innerText =
+            "Ошибка подключения: " +
+            (
+                error.message ||
+                "неизвестная ошибка"
+            );
+
+    }
+
+}
+
+
+/*
+    Добавление GlebusNet
+*/
+
+async function addNetwork() {
+
+    const wallet =
+        getOKXWallet();
+
+    if (!wallet) {
+
+        document.getElementById("status").innerText =
+            "OKX Wallet не найден. Откройте DApp через OKX Wallet.";
+
+        return;
+    }
 
     try {
 
-        await window.ethereum.request({
+        document.getElementById("status").innerText =
+            "Добавляем GlebusNet...";
 
-            method: "wallet_addEthereumChain",
+
+        await wallet.request({
+
+            method:
+                "wallet_addEthereumChain",
 
             params: [
 
                 {
 
-                    chainId: CHAIN_ID,
+                    chainId:
+                        CHAIN_ID,
 
-                    chainName: "GlebusNet",
+                    chainName:
+                        "GlebusNet",
 
                     nativeCurrency: {
 
-                        name: "GAS",
+                        name:
+                            "GAS",
 
-                        symbol: "GAS",
+                        symbol:
+                            "GAS",
 
-                        decimals: 18
+                        decimals:
+                            18
 
                     },
 
@@ -225,68 +304,84 @@ async function addNetwork() {
 
 
         document.getElementById("status").innerText =
-            "GlebusNet добавлен!";
+            "GlebusNet успешно добавлен!";
 
 
     } catch (error) {
 
         console.error(error);
 
-
         document.getElementById("status").innerText =
-            "Ошибка: " +
-            (error.message || "не удалось добавить сеть");
+            "Ошибка добавления сети: " +
+            (
+                error.message ||
+                "неизвестная ошибка"
+            );
 
     }
 
 }
 
 
+/*
+    Добавление GLB
+*/
 
 async function addToken() {
 
-    if (!window.ethereum) {
+    const wallet =
+        getOKXWallet();
+
+    if (!wallet) {
 
         document.getElementById("status").innerText =
-            "MetaMask не найден. Откройте страницу через MetaMask.";
+            "OKX Wallet не найден. Откройте DApp через OKX Wallet.";
 
         return;
     }
 
-
     try {
 
-
         document.getElementById("status").innerText =
-            "Переключаемся на GlebusNet...";
+            "Проверяем сеть...";
 
 
-        // Проверяем текущую сеть
+        /*
+            Узнаём текущую сеть
+        */
 
         const currentChain =
-            await window.ethereum.request({
+            await wallet.request({
 
-                method: "eth_chainId"
+                method:
+                    "eth_chainId"
 
             });
 
 
-        // Если это не GlebusNet,
-        // переключаемся на неё
+        /*
+            Если это не GlebusNet,
+            сначала пытаемся переключиться.
+        */
 
-        if (currentChain !== CHAIN_ID) {
+        if (
+            currentChain.toLowerCase() !==
+            CHAIN_ID.toLowerCase()
+        ) {
 
             try {
 
-                await window.ethereum.request({
+                await wallet.request({
 
-                    method: "wallet_switchEthereumChain",
+                    method:
+                        "wallet_switchEthereumChain",
 
                     params: [
 
                         {
 
-                            chainId: CHAIN_ID
+                            chainId:
+                                CHAIN_ID
 
                         }
 
@@ -296,29 +391,41 @@ async function addToken() {
 
             } catch (switchError) {
 
-                // 4902 = сеть ещё не добавлена
+                /*
+                    4902 означает,
+                    что сеть ещё не добавлена.
+                */
 
-                if (switchError.code === 4902) {
+                if (
+                    switchError.code ===
+                    4902
+                ) {
 
-                    await window.ethereum.request({
+                    await wallet.request({
 
-                        method: "wallet_addEthereumChain",
+                        method:
+                            "wallet_addEthereumChain",
 
                         params: [
 
                             {
 
-                                chainId: CHAIN_ID,
+                                chainId:
+                                    CHAIN_ID,
 
-                                chainName: "GlebusNet",
+                                chainName:
+                                    "GlebusNet",
 
                                 nativeCurrency: {
 
-                                    name: "GAS",
+                                    name:
+                                        "GAS",
 
-                                    symbol: "GAS",
+                                    symbol:
+                                        "GAS",
 
-                                    decimals: 18
+                                    decimals:
+                                        18
 
                                 },
 
@@ -346,29 +453,39 @@ async function addToken() {
 
 
         document.getElementById("status").innerText =
-            "Добавляем GLB...";
+            "Добавляем Glebus (GLB)...";
 
 
-        // Добавляем ERC-20 токен
+        /*
+            Просим OKX добавить токен.
+
+            Здесь передаётся URL твоего логотипа.
+        */
 
         const added =
-            await window.ethereum.request({
+            await wallet.request({
 
-                method: "wallet_watchAsset",
+                method:
+                    "wallet_watchAsset",
 
                 params: {
 
-                    type: "ERC20",
+                    type:
+                        "ERC20",
 
                     options: {
 
-                        address: TOKEN,
+                        address:
+                            TOKEN,
 
-                        symbol: "GLB",
+                        symbol:
+                            "GLB",
 
-                        decimals: 18,
+                        decimals:
+                            18,
 
-                        image: GLB_LOGO
+                        image:
+                            GLB_LOGO
 
                     }
 
@@ -377,10 +494,10 @@ async function addToken() {
             });
 
 
-        if (added) {
+        if (added === true) {
 
             document.getElementById("status").innerText =
-                "GLB успешно добавлен в MetaMask!";
+                "Glebus (GLB) успешно добавлен в OKX Wallet!";
 
         } else {
 
@@ -394,19 +511,15 @@ async function addToken() {
 
         console.error(error);
 
-
         document.getElementById("status").innerText =
-            "Ошибка MetaMask: " +
-            (error.message || "неизвестная ошибка");
+            "Ошибка OKX Wallet: " +
+            (
+                error.message ||
+                "неизвестная ошибка"
+            );
 
     }
 
 }
 
-
-</script>
-
-
-</body>
-
-</html>
+</script></body></html>
