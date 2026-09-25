@@ -1,0 +1,14 @@
+{
+  "name": "GlebusNet Token List",
+  "logoURI": "https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png",
+  "tokens": [
+    {
+      "chainId": 7777,
+      "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "name": "Glebus",
+      "symbol": "GLB",
+      "decimals": 18,
+      "logoURI": "https://i.ibb.co/7d0fTvgN/file-000000004fc482109e9ebee3afecb3fb.png"
+    }
+  ]
+}
