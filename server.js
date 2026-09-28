@@ -1568,17 +1568,33 @@ async function handleExplorerRequest(req, res) {
                         Number(a.number)
                 );
 
-        // Если текущего локального блока ещё нет
-        // в сохранённой истории — добавляем его.
-        if (
-            latestBlock > 0 &&
-            !blocksMap.has(latestBlock)
-        ) {
-            blocks.unshift({
-                number: latestBlock,
-                transactions: []
-            });
-        }
+        // Учитываем и текущий Hardhat-блок,
+// и самый новый блок из сохранённой истории Neon.
+const latestSavedBlock =
+    blocks.length > 0
+        ? Math.max(
+            ...blocks.map(
+                block => Number(block.number)
+            )
+        )
+        : 0;
+
+latestBlock = Math.max(
+    latestBlock,
+    latestSavedBlock
+);
+
+// Если последнего блока ещё нет
+// в сохранённой истории — добавляем его.
+if (
+    latestBlock > 0 &&
+    !blocksMap.has(latestBlock)
+) {
+    blocks.unshift({
+        number: latestBlock,
+        transactions: []
+    });
+}
 
         res.writeHead(200, {
             "Content-Type":
